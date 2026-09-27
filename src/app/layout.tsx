@@ -41,7 +41,7 @@ function Header() {
               ))}
               <li className="rule mt-4 flex gap-8 pt-6 sm:hidden">
                 <Link href="/search" className="label">Search</Link>
-                <Link href="/sign-in" className="label">Account</Link>
+                <Link href="/account" className="label">Account</Link>
               </li>
             </ul>
           </nav>
@@ -72,10 +72,10 @@ function Header() {
             <Link href="/search" className="label link-nav">Search</Link>
           </li>
           <li className="hidden sm:block">
-            <Link href="/sign-in" className="label link-nav">Account</Link>
+            <Link href="/account" className="label link-nav">Account</Link>
           </li>
           <li>
-            <Link href="/bag" className="label link-nav">Bag (0)</Link>
+            <Link href="/bag" className="label link-nav">Bag</Link>
           </li>
         </ul>
       </div>

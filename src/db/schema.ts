@@ -6,6 +6,7 @@ import {
   integer,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   unique,
@@ -30,6 +31,7 @@ export const user = pgTable("user", {
     .defaultNow()
     .$onUpdate(() => /* @__PURE__ */ new Date())
     .notNull(),
+  role: text("role").default("customer").notNull(),
 });
 
 export const session = pgTable(
@@ -190,4 +192,28 @@ export const productImages = pgTable(
 
 export const productImagesRelations = relations(productImages, ({ one }) => ({
   product: one(products, { fields: [productImages.productId], references: [products.id] }),
+}));
+
+// ─── Bag ─────────────────────────────────────────────────────────────────────
+// One row per (user, product, size). No price column: amounts are always read live from products.
+// Deleting a product (e.g. db:seed) or a user removes their bag lines.
+export const cartItems = pgTable(
+  "cart_items",
+  {
+    userId: text().notNull().references(() => user.id, { onDelete: "cascade" }),
+    productId: uuid().notNull().references(() => products.id, { onDelete: "cascade" }),
+    size: text().notNull().default(""), // display-only size; "" for one-size categories
+    quantity: integer().notNull(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.productId, t.size] }),
+    check("cart_items_quantity_range", sql`${t.quantity} between 1 and 10`),
+  ],
+);
+
+export const cartItemsRelations = relations(cartItems, ({ one }) => ({
+  user: one(user, { fields: [cartItems.userId], references: [user.id] }),
+  product: one(products, { fields: [cartItems.productId], references: [products.id] }),
 }));

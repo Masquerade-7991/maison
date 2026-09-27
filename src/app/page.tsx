@@ -12,7 +12,7 @@ export default async function Home() {
   return (
     <>
       {/* Hero: full viewport, headline left, actions right on desktop */}
-      <section className="media-hero h-[calc(100svh-var(--spacing-header))] min-h-[32rem] w-full">
+      <section className="media-hero h-[calc(100svh-var(--spacing-header))] min-h-128 w-full">
         <Image
           src={hero.src}
           alt={hero.alt}
@@ -40,14 +40,14 @@ export default async function Home() {
       {/* Collections: categories with an image, from the database. Lead + two stacked on desktop, swipe row on phones */}
       <section className="container-page pt-section">
         <h2 className="label">The collections</h2>
-        <ul className="-mx-gutter mt-6 flex snap-x snap-mandatory scroll-px-gutter gap-2 overflow-x-auto px-gutter [scrollbar-width:none] md:mx-0 md:grid md:grid-cols-12 md:grid-rows-2 md:gap-4 md:overflow-visible md:px-0">
+        <ul className="-mx-gutter mt-6 flex snap-x snap-mandatory scroll-px-gutter gap-2 overflow-x-auto px-gutter scrollbar-none md:mx-0 md:grid md:grid-cols-12 md:grid-rows-2 md:gap-4 md:overflow-visible md:px-0">
           {collections.map((c, i) => (
             <li
               key={c.slug}
               className={`w-[82%] shrink-0 snap-start md:w-auto ${i === 0 ? "md:col-span-7 md:row-span-2" : "md:col-span-5"}`}
             >
               <Link href={`/collections/${c.slug}`} className="group relative block h-full">
-                <div className={`relative overflow-hidden bg-surface ${i === 0 ? "aspect-4/5 md:aspect-square xl:aspect-5/4" : "aspect-4/5 md:aspect-auto md:h-full"}`}>
+                <div className={`relative overflow-hidden bg-surface ${i === 0 ? "aspect-product md:aspect-square xl:aspect-5/4" : "aspect-product md:aspect-auto md:h-full"}`}>
                   <Image
                     src={c.imageUrl}
                     alt={c.imageAlt}
@@ -91,7 +91,7 @@ export default async function Home() {
 
       {/* Editorial split */}
       <section className="mt-section grid bg-surface md:grid-cols-2">
-        <div className="relative aspect-4/5 md:aspect-square">
+        <div className="relative aspect-product md:aspect-square">
           <Image
             src={atelier.src}
             alt={atelier.alt}

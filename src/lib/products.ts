@@ -65,19 +65,42 @@ export type ListScope =
   | { category: string }
   | { department: Exclude<Department, "unisex"> }
   | { gift: true }
-  | { newest: number };
+  | { newest: number }
+  | { search: string };
+
+// ponytail: substring ILIKE per word with a naive plural stem ("jackets" -> "jacket"). Fine for a small
+// catalogue; move to Postgres full-text search (tsvector + GIN index) once it outgrows a sequential scan.
+const searchTerms = (q: string) =>
+  q
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 5)
+    .map((w) => `%${(w.length > 3 ? w.replace(/s$/, "") : w).replace(/[\\%_]/g, "\\$&")}%`);
 
 // One view's products, newest first, packshot only.
 export async function listProducts(scope: ListScope): Promise<Product[]> {
   const rows = await db.query.products.findMany({
-    where: (p, { and, eq, inArray }) =>
+    where: (p, { and, eq, ilike, inArray, or }) =>
       "category" in scope
         ? inArray(p.categoryId, db.select({ id: categories.id }).from(categories).where(eq(categories.slug, scope.category)))
         : "department" in scope
           ? inArray(p.department, [scope.department, "unisex"])
           : "gift" in scope
             ? and(eq(p.isGift, true))
-            : undefined,
+            : "search" in scope
+              ? // Every word must match somewhere: name, colour, description or category name.
+                and(
+                  ...searchTerms(scope.search).map((like) =>
+                    or(
+                      ilike(p.name, like),
+                      ilike(p.colour, like),
+                      ilike(p.description, like),
+                      inArray(p.categoryId, db.select({ id: categories.id }).from(categories).where(ilike(categories.name, like))),
+                    ),
+                  ),
+                )
+              : undefined,
     orderBy: (p, { desc }) => [desc(p.createdAt)],
     limit: "newest" in scope ? scope.newest : undefined,
     extras: (p) => ({ isNew: isNewExtra(p) }),

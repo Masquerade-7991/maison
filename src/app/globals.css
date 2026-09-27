@@ -296,6 +296,13 @@
     outline: none;
     border-bottom-color: var(--ink);
   }
+  /* After :focus so an invalid field stays marked while it is being corrected. */
+  &[aria-invalid="true"] {
+    border-bottom-color: var(--danger);
+  }
+  &:disabled {
+    opacity: 0.6;
+  }
 }
 
 /* Product grid: 2 cols phone → 3 tablet → 4 desktop, tight gutters so imagery dominates. */

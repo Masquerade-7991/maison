@@ -10,16 +10,17 @@ export async function generateMetadata({ params }: PageProps<"/collections/[slug
 
 export default async function CollectionPage({ params, searchParams }: PageProps<"/collections/[slug]">) {
   const { slug } = await params;
-  const category = await getCategoryBySlug(slug);
+  const [category, products] = await Promise.all([getCategoryBySlug(slug), listProducts({ category: slug })]);
   if (!category) notFound();
 
   return (
     <ProductListing
       title={category.name}
       intro={category.description}
-      products={await listProducts({ category: slug })}
+      products={products}
       searchParams={await searchParams}
       tabs={departmentTabs}
+      image={category.imageUrl ? { url: category.imageUrl, alt: category.imageAlt ?? category.name } : undefined}
     />
   );
 }

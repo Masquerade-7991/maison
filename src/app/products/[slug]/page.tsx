@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { AddToBagForm } from "@/components/add-to-bag-form";
 import { ProductCard } from "@/components/product-card";
 import { currency } from "@/lib/format";
 import { colourSwatch } from "@/lib/listing";
@@ -49,7 +50,7 @@ export default async function ProductPage({ params }: PageProps<"/products/[slug
 
         <div className="mt-6 grid gap-8 md:grid-cols-12 md:gap-10 lg:gap-16">
           {/* Gallery: swipe row on phones, stacked on tablet, lead + pair on desktop */}
-          <ul className="-mx-gutter flex snap-x snap-mandatory scroll-px-gutter gap-2 overflow-x-auto px-gutter [scrollbar-width:none] md:col-span-7 md:mx-0 md:grid md:overflow-visible md:px-0 lg:col-span-8 lg:grid-cols-2">
+          <ul className="-mx-gutter flex snap-x snap-mandatory scroll-px-gutter gap-2 overflow-x-auto px-gutter scrollbar-none md:col-span-7 md:mx-0 md:grid md:overflow-visible md:px-0 lg:col-span-8 lg:grid-cols-2">
             {p.images.map((im, i) => (
               <li key={im.url} className={`w-[88%] shrink-0 snap-start md:w-auto ${i === 0 ? "lg:col-span-2" : ""}`}>
                 <div className="media-product">
@@ -91,32 +92,7 @@ export default async function ProductPage({ params }: PageProps<"/products/[slug
               <span>{p.colour}</span>
             </div>
 
-            {/* ponytail: posts to /bag, which does not exist yet; wire to a cart action when one does. */}
-            <form action="/bag" className="mt-6">
-              <input type="hidden" name="product" value={p.slug} />
-              {sizes.length > 0 ? (
-                <fieldset disabled={!buyable}>
-                  <legend className="label text-muted">Size</legend>
-                  <div className={`mt-3 grid gap-1 ${sizes.length > 5 ? "grid-cols-4" : "grid-cols-5"}`}>
-                    {sizes.map((s) => (
-                      <label
-                        key={s}
-                        className="flex h-11 cursor-pointer items-center justify-center border border-line text-sm transition-colors hover:border-ink has-checked:border-ink has-checked:bg-ink has-checked:text-paper has-focus-visible:outline has-focus-visible:outline-offset-2 has-disabled:cursor-not-allowed has-disabled:text-muted has-disabled:hover:border-line"
-                      >
-                        <input type="radio" name="size" value={s} required className="sr-only" />
-                        {s}
-                      </label>
-                    ))}
-                  </div>
-                </fieldset>
-              ) : (
-                <p className="text-muted">One size</p>
-              )}
-
-              <button type="submit" disabled={!buyable} className="btn btn-primary mt-6 sm:w-full">
-                {buyable ? "Add to bag" : "Sold out"}
-              </button>
-            </form>
+            <AddToBagForm slug={p.slug} sizes={sizes} buyable={buyable} />
 
             <p className="mt-4 text-muted">Complimentary shipping and returns within 30 days.</p>
 

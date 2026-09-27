@@ -16,6 +16,7 @@ export default async function Page({ searchParams }: PageProps<"/new-arrivals">)
       products={products}
       searchParams={await searchParams}
       tabs={categoryTabs(categories)}
+      showNew={false}
     />
   );
 }

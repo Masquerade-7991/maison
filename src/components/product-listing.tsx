@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { ProductCard } from "@/components/product-card";
 import { colourSwatch, filterProducts, priceBands, sorts, type Filters } from "@/lib/listing";
@@ -46,12 +47,18 @@ export function ProductListing({
   products,
   searchParams: sp,
   tabs,
+  showNew = true,
+  image,
 }: {
   title: string;
   intro: string;
   products: Product[];
   searchParams: SearchParams;
   tabs?: ListingTabs;
+  /** Off where every piece is new anyway (/new-arrivals), so the tag doesn't drown out "Sold out". */
+  showNew?: boolean;
+  /** Banner photo (a category's imageUrl), so the page matches the homepage tile that links to it. */
+  image?: { url: string; alt: string };
 }) {
   const filters: Filters = {
     category: first(sp.category),
@@ -76,12 +83,27 @@ export function ProductListing({
 
   return (
     <>
-      <section className="container-page pt-12 md:pt-20">
-        <h1 className="text-display">{title}</h1>
-        <p className="mt-3 max-w-md text-muted">{intro}</p>
+      {image && (
+        <section className="relative h-[50svh] max-h-144 min-h-80 overflow-hidden bg-surface">
+          <Image src={image.url} alt={image.alt} fill preload sizes="100vw" className="object-cover" />
+          <div className="absolute inset-0 bg-linear-to-t from-black/60 via-black/10 to-transparent" />
+          <div className="container-page absolute inset-x-0 bottom-0 pb-8 text-white md:pb-12">
+            <h1 className="text-display">{title}</h1>
+            <p className="mt-3 max-w-md text-white/85">{intro}</p>
+          </div>
+        </section>
+      )}
+
+      <section className={`container-page ${image ? "" : "pt-12 md:pt-20"}`}>
+        {!image && (
+          <>
+            <h1 className="text-display">{title}</h1>
+            <p className="mt-3 max-w-md text-muted">{intro}</p>
+          </>
+        )}
 
         {tabs && tabOptions.length > 1 && (
-          <nav aria-label={tabs.label} className="-mx-gutter mt-8 overflow-x-auto px-gutter [scrollbar-width:none] md:mt-12">
+          <nav aria-label={tabs.label} className="-mx-gutter mt-8 overflow-x-auto px-gutter scrollbar-none md:mt-12">
             <ul className="flex gap-7 whitespace-nowrap">
               {[{ value: undefined, label: "All" }, ...tabOptions].map((o) => (
                 <li key={o.value ?? "all"}>
@@ -210,7 +232,7 @@ export function ProductListing({
           <ul className="grid-products">
             {results.map((p, i) => (
               <li key={p.slug}>
-                <ProductCard product={p} preload={i < 2} />
+                <ProductCard product={p} preload={i < 2} showNew={showNew} />
               </li>
             ))}
           </ul>
