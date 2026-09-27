@@ -1,69 +1,130 @@
 import Image from "next/image";
+import Link from "next/link";
+import { ProductCard } from "@/components/product-card";
+import { getCollections, getNewArrivals } from "@/lib/products";
+import { atelier, hero, services } from "@/lib/sample-data";
 
-export default function Home() {
+export const revalidate = 300;
+
+export default async function Home() {
+  const [collections, newArrivals] = await Promise.all([getCollections(), getNewArrivals(8)]);
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
+    <>
+      {/* Hero: full viewport, headline left, actions right on desktop */}
+      <section className="media-hero h-[calc(100svh-var(--spacing-header))] min-h-[32rem] w-full">
         <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+          src={hero.src}
+          alt={hero.alt}
+          fill
+          preload
+          sizes="100vw"
+          className="object-[center_25%]"
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+        <div className="absolute inset-0 bg-linear-to-t from-black/65 via-black/15 to-transparent" />
+        <div className="container-page absolute inset-x-0 bottom-0 flex flex-col gap-8 pb-10 text-white md:flex-row md:items-end md:justify-between md:pb-16">
+          <div>
+            <p className="label">Autumn–Winter 2026</p>
+            <h1 className="mt-4 text-display-lg">The Quiet Season</h1>
+            <p className="mt-5 max-w-md text-white/85">
+              Soft tailoring, heavy wool and pale blues for the colder months.
+            </p>
+          </div>
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-center md:shrink-0">
+            <Link href="/women" className="btn btn-inverse">Shop the collection</Link>
+            <Link href="/men" className="label link self-center">Shop men</Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Collections: categories with an image, from the database. Lead + two stacked on desktop, swipe row on phones */}
+      <section className="container-page pt-section">
+        <h2 className="label">The collections</h2>
+        <ul className="-mx-gutter mt-6 flex snap-x snap-mandatory scroll-px-gutter gap-2 overflow-x-auto px-gutter [scrollbar-width:none] md:mx-0 md:grid md:grid-cols-12 md:grid-rows-2 md:gap-4 md:overflow-visible md:px-0">
+          {collections.map((c, i) => (
+            <li
+              key={c.slug}
+              className={`w-[82%] shrink-0 snap-start md:w-auto ${i === 0 ? "md:col-span-7 md:row-span-2" : "md:col-span-5"}`}
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+              <Link href={`/collections/${c.slug}`} className="group relative block h-full">
+                <div className={`relative overflow-hidden bg-surface ${i === 0 ? "aspect-4/5 md:aspect-square xl:aspect-5/4" : "aspect-4/5 md:aspect-auto md:h-full"}`}>
+                  <Image
+                    src={c.imageUrl}
+                    alt={c.imageAlt}
+                    fill
+                    sizes={i === 0 ? "(min-width: 768px) 58vw, 82vw" : "(min-width: 768px) 42vw, 82vw"}
+                    className="object-cover transition-transform duration-700 ease-out-soft group-hover:scale-[1.03]"
+                  />
+                  <div className="absolute inset-0 bg-linear-to-t from-black/50 to-transparent to-50%" />
+                  <div className="absolute inset-x-0 bottom-0 flex items-end justify-between p-5 text-white md:p-8">
+                    <div>
+                      <h3 className={i === 0 ? "text-display" : "text-display-sm"}>{c.name}</h3>
+                      <p className="label mt-2 text-white/80">
+                        {c.pieceCount} {c.pieceCount === 1 ? "piece" : "pieces"}
+                      </p>
+                    </div>
+                    <span className="label link-nav group-hover:decoration-current">Discover</span>
+                  </div>
+                </div>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {/* New arrivals */}
+      <section className="container-page pt-section">
+        <div className="flex items-end justify-between gap-4">
+          <h2 className="text-display">New arrivals</h2>
+          <Link href="/new-arrivals" className="label link hidden sm:inline">View all</Link>
+        </div>
+        <ul className="grid-products mt-8 md:mt-12">
+          {newArrivals.map((p, i) => (
+            // 3-col tablet grid shows 6 so the last row is never an orphan
+            <li key={p.slug} className={i >= 6 ? "md:max-xl:hidden" : undefined}>
+              <ProductCard product={p} showNew={false} />
+            </li>
+          ))}
+        </ul>
+        <Link href="/new-arrivals" className="btn btn-secondary mt-12 sm:hidden">View all</Link>
+      </section>
+
+      {/* Editorial split */}
+      <section className="mt-section grid bg-surface md:grid-cols-2">
+        <div className="relative aspect-4/5 md:aspect-square">
+          <Image
+            src={atelier.src}
+            alt={atelier.alt}
+            fill
+            sizes="(min-width: 768px) 50vw, 100vw"
+            className="object-cover"
+          />
+        </div>
+        <div className="flex flex-col justify-center px-gutter py-16 md:px-[max(var(--spacing-gutter),6vw)] md:py-section">
+          <p className="label text-muted">The edit</p>
+          <h2 className="mt-4 text-display">Knitwear, softly</h2>
+          <p className="mt-6 max-w-sm text-muted">
+            Cashmere, merino and bouclé in undyed tones. Pieces designed to layer through the
+            colder months and wear for years after.
           </p>
+          <div className="mt-10">
+            <Link href="/collections/ready-to-wear" className="btn btn-primary">Discover the edit</Link>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+      </section>
+
+      {/* Services: quiet strip that hands off to the footer */}
+      <section className="container-page pt-section">
+        <h2 className="sr-only">Our services</h2>
+        <ul className="grid gap-x-8 gap-y-8 sm:grid-cols-2 lg:grid-cols-4">
+          {services.map((s) => (
+            <li key={s.title} className="rule pt-5">
+              <h3 className="label">{s.title}</h3>
+              <p className="mt-2 max-w-xs text-muted">{s.body}</p>
+            </li>
+          ))}
+        </ul>
+      </section>
+    </>
   );
 }
