@@ -85,8 +85,8 @@ export function AuthForm({ mode, next }: { mode: AuthMode; next: string }) {
         return; // stay "pending" while the next page loads
       }
       const code = error?.code ?? "";
-      // A link exists only after a real sign-up or an unverified sign-in, and only in development.
-      const link = !error || code === "EMAIL_NOT_VERIFIED" ? await getDevVerificationLink(values.email).catch(() => null) : null;
+      // A link exists only for an unverified account, and only while email is off (dev or the test site).
+      const link = !error || code === "EMAIL_NOT_VERIFIED" ? await getDevVerificationLink(values.email, next).catch(() => null) : null;
       // Re-enable the fieldset now, so a field can take focus below (disabled inputs can't).
       flushSync(() => setPending(false));
       setDevLink(link);
@@ -94,7 +94,7 @@ export function AuthForm({ mode, next }: { mode: AuthMode; next: string }) {
       if (code === "EMAIL_NOT_VERIFIED") {
         setNotice(
           link
-            ? "Please verify your email first. Email is switched off in development, so use the link below."
+            ? "Please verify your email first. Email is switched off on this site, so use the link below."
             : `Please verify your email first. We've sent a new link to ${values.email}.`,
         );
       } else if (fieldErrors[code]) {
@@ -117,13 +117,13 @@ export function AuthForm({ mode, next }: { mode: AuthMode; next: string }) {
   if (sentTo && devLink) {
     return (
       <div role="status" className="text-center">
-        <p className="label text-muted">Development mode</p>
+        <p className="label text-muted">Test site</p>
         <p className="mt-3 text-display-sm">Verify your email</p>
         <p className="mt-3">
           Email sending is switched off, so here&apos;s the link for <span className="font-medium">{sentTo}</span>.
         </p>
         <a href={devLink} className="btn btn-primary mt-8 sm:w-full">Verify email and continue</a>
-        <p className="mt-4 text-muted">It works once and expires in an hour. It&apos;s also printed in the dev server terminal.</p>
+        <p className="mt-4 text-muted">It expires in an hour.</p>
       </div>
     );
   }

@@ -1,21 +1,18 @@
 // Transactional email through Resend's HTTP API (plain fetch, no SDK).
 //
-// Development without RESEND_API_KEY / EMAIL_FROM: nothing is sent. The message is printed to the
-// server console, and the verification link is also kept in an in-memory outbox that the sign-up
-// page shows directly (src/lib/dev-email-actions.ts). Production never takes this path: it throws.
+// Email is "off" when RESEND_API_KEY / EMAIL_FROM are missing, in development or on a deployment with
+// EMAIL_LINKS_ON_PAGE=true (the internal test site). Nothing is sent: the message is printed to the
+// server log, and the sign-up page shows the verification link itself (src/lib/dev-email-actions.ts).
+// Anywhere else a missing key throws. Never set EMAIL_LINKS_ON_PAGE on a real launch: it lets anyone
+// verify an address they don't own.
 
-export const emailIsOffInDev = () =>
-  process.env.NODE_ENV !== "production" && !(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
+export const emailIsOff = () =>
+  (process.env.NODE_ENV !== "production" || process.env.EMAIL_LINKS_ON_PAGE === "true") &&
+  !(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
 
-type Outbox = Map<string, { url: string; at: number }>;
-// On globalThis so the auth route handler and the Server Action share it even if bundled separately.
-const g = globalThis as { __maisonDevOutbox?: Outbox };
-export const devOutbox: Outbox = (g.__maisonDevOutbox ??= new Map());
-
-export async function sendEmail({ to, subject, text, link }: { to: string; subject: string; text: string; link?: string }) {
-  if (emailIsOffInDev()) {
+export async function sendEmail({ to, subject, text }: { to: string; subject: string; text: string }) {
+  if (emailIsOff()) {
     console.info(`[email] to ${to} | ${subject}\n${text}`);
-    if (link) devOutbox.set(to.toLowerCase(), { url: link, at: Date.now() });
     return;
   }
   const key = process.env.RESEND_API_KEY;

@@ -1,17 +1,30 @@
 "use server";
 
-import { devOutbox, emailIsOffInDev } from "@/lib/email";
-
-const LINK_TTL_MS = 60 * 60 * 1000; // matches emailVerification.expiresIn in src/lib/auth.ts
+import { and, eq } from "drizzle-orm";
+import { createEmailVerificationToken } from "better-auth/api";
+import { db } from "@/db";
+import { user } from "@/db/schema";
+import { auth } from "@/lib/auth";
+import { emailIsOff } from "@/lib/email";
+import { safeNext } from "@/lib/session";
 
 /**
- * Development only: the verification link that would have been emailed to this address, so the
- * sign-up page can show it instead of "check your inbox". Returns null whenever real email is
- * configured or the app runs in production. Showing the link there would let anyone verify an
- * address they don't own.
+ * Only while email is off (development, or the test site with EMAIL_LINKS_ON_PAGE): the verification
+ * link for an existing unverified account, so the sign-up page can show it instead of "check your
+ * inbox". Built the way Better Auth builds it (signed token, no storage), so it works on any serverless
+ * instance. Returns null whenever real email is configured: showing the link then would let anyone
+ * verify an address they don't own.
  */
-export async function getDevVerificationLink(email: string): Promise<string | null> {
-  if (!emailIsOffInDev() || typeof email !== "string") return null;
-  const entry = devOutbox.get(email.trim().toLowerCase());
-  return entry && Date.now() - entry.at < LINK_TTL_MS ? entry.url : null;
+export async function getDevVerificationLink(email: string, next?: string): Promise<string | null> {
+  if (!emailIsOff() || typeof email !== "string") return null;
+  const address = email.trim().toLowerCase();
+  const [found] = await db
+    .select({ id: user.id })
+    .from(user)
+    .where(and(eq(user.email, address), eq(user.emailVerified, false)));
+  if (!found) return null;
+  const ctx = await auth.$context;
+  const token = await createEmailVerificationToken(ctx.secret, address, undefined, ctx.options.emailVerification?.expiresIn);
+  const callbackURL = encodeURIComponent(`/sign-in?next=${encodeURIComponent(safeNext(next))}`);
+  return `${ctx.baseURL}/verify-email?token=${token}&callbackURL=${callbackURL}`;
 }
