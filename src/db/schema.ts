@@ -1,5 +1,6 @@
 import { relations, sql } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   check,
   index,
@@ -93,6 +94,13 @@ export const verification = pgTable(
   },
   (table) => [index("verification_identifier_idx").on(table.identifier)],
 );
+
+export const rateLimit = pgTable("rate_limit", {
+  id: text("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  count: integer("count").notNull(),
+  lastRequest: bigint("last_request", { mode: "number" }).notNull(),
+});
 
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
@@ -223,6 +231,8 @@ export const cartItemsRelations = relations(cartItems, ({ one }) => ({
 // Created "pending" when checkout starts (prices and items snapshotted from our DB), then moved
 // forward only by Stripe-verified events via applyCheckoutSession in src/lib/orders.ts.
 export const orderStatus = pgEnum("order_status", ["pending", "processing", "paid", "payment_failed", "expired"]);
+// What happened after payment, set by an admin (src/lib/admin-orders.ts). Separate from status, which only Stripe moves.
+export const fulfilmentStatus = pgEnum("fulfilment_status", ["unfulfilled", "shipped", "delivered", "cancelled"]);
 
 export const orders = pgTable(
   "orders",
@@ -240,13 +250,21 @@ export const orders = pgTable(
     shippingName: text(),
     shippingAddress: jsonb(), // Stripe's collected address, as returned
     stockShortfall: boolean().notNull().default(false), // stock was below the order when it was paid (oversell)
+    refundedCents: integer().notNull().default(0), // Stripe's cumulative charge.amount_refunded (refunds are issued in the Dashboard)
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
     paidAt: timestamp({ withTimezone: true }),
+    fulfilmentStatus: fulfilmentStatus().notNull().default("unfulfilled"),
+    carrier: text(),
+    trackingNumber: text(),
+    shippedAt: timestamp({ withTimezone: true }),
+    deliveredAt: timestamp({ withTimezone: true }),
+    cancelledAt: timestamp({ withTimezone: true }),
   },
   (t) => [
     index("orders_user_created_idx").on(t.userId, t.createdAt.desc()),
     check("orders_subtotal_positive", sql`${t.subtotalCents} > 0`),
+    check("orders_refunded_non_negative", sql`${t.refundedCents} >= 0`),
   ],
 );
 

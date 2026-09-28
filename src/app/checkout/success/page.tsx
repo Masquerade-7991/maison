@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type Stripe from "stripe";
 import { AutoRefresh } from "@/components/auto-refresh";
-import { OrderDetails } from "@/components/order-details";
+import { OrderDelivery, OrderTotals } from "@/components/order-details";
+import { formatCents } from "@/lib/format";
 import { applyCheckoutSession, getOrderForUser } from "@/lib/orders";
 import { orderReference, orderStatusCopy, sessionEvent } from "@/lib/order-rules";
 import { requireUser } from "@/lib/session";
@@ -48,50 +50,123 @@ export default async function CheckoutSuccessPage({ searchParams }: PageProps<"/
   const processing = order.status === "processing";
   // Stripe has the payment but the webhook hasn't reached us yet: show "confirming" and poll.
   const confirming = order.status === "pending" && session.status === "complete";
+  const onItsWay = paid || processing || confirming; // the order will go ahead: show what comes next
   const firstName = user.name.trim().split(/\s+/)[0];
   const email = order.customerEmail ?? user.email;
-  const [title, body] = paid
-    ? [`Thank you, ${firstName}`, `Your order is confirmed. A receipt is on its way to ${email}.`]
+  const reference = orderReference(order.id);
+  const city = (order.shippingAddress as { city?: string | null } | null)?.city;
+  const pieces = order.items.reduce((n, i) => n + i.quantity, 0);
+
+  const [eyebrow, title, body] = paid
+    ? ["Order confirmed", null, `Your order is confirmed and a receipt is on its way to ${email}. Here is what happens now.`]
     : confirming
-      ? ["Confirming your order", "Stripe is confirming your payment with us. This usually takes a few seconds, and your order is safe if you leave this page."]
+      ? ["Confirming payment", "Confirming your order", "Stripe is confirming your payment with us. This usually takes a few seconds, and your order is safe if you leave this page."]
       : processing
-        ? ["Your payment is processing", "Your bank is confirming the payment. We'll prepare your order as soon as it clears."]
+        ? ["Payment processing", "Your payment is processing", "Your bank is confirming the payment. We'll prepare your order as soon as it clears."]
         : order.status === "payment_failed"
-          ? ["Your payment didn't go through", "Your bank declined the payment, so nothing was charged. Your bag is saved: you can try again with another payment method."]
+          ? ["Payment failed", "Your payment didn't go through", "Your bank declined the payment, so nothing was charged. Your bag is saved: you can try again with another payment method."]
           : order.status === "expired"
-            ? ["This checkout has expired", "Checkout sessions close after 30 minutes, or when a newer one starts. Nothing was charged and your bag is saved."]
-            : ["This checkout isn't finished", "No payment has been taken. Your bag is saved if you'd like to check out again."];
+            ? ["Checkout expired", "This checkout has expired", "Checkout sessions close after 30 minutes, or when a newer one starts. Nothing was charged and your bag is saved."]
+            : [orderStatusCopy[order.status], "This checkout isn't finished", "No payment has been taken. Your bag is saved if you'd like to check out again."];
+
+  const steps = [
+    paid
+      ? { title: "Confirmed", body: <>Your receipt is in {email}. Quote <span className="whitespace-nowrap">{reference}</span> whenever you contact us.</> }
+      : { title: "Payment", body: "We prepare your order as soon as payment is confirmed, and email your receipt." },
+    { title: "Wrapped and boxed", body: "Every piece is wrapped and boxed in our signature packaging, ready to give." },
+    { title: "Express delivery", body: `Complimentary express delivery${city ? ` to ${city}` : ""}, with a signature on arrival.` },
+  ];
 
   return (
-    <section className="container-page py-12 md:py-20">
-      {/* Live region: announces "Confirming" turning into "Thank you" when AutoRefresh re-renders. */}
-      <header aria-live="polite" className="mx-auto max-w-2xl text-center">
-        <p className={`label ${order.status === "payment_failed" ? "text-danger" : "text-muted"}`}>{confirming ? "Confirming payment" : orderStatusCopy[order.status]}</p>
-        <h1 className="mt-4 text-display-sm">{title}</h1>
-        <p className="mt-4 text-muted">{body}</p>
-        {confirming && (
-          <>
-            <span aria-hidden className="mx-auto mt-6 block size-4 animate-spin rounded-full border border-current border-t-transparent" />
-            <AutoRefresh />
-          </>
-        )}
-        <p className="label mt-6">Order {orderReference(order.id)}</p>
-      </header>
+    <section className="container-page py-6 md:py-10">
+      <div className="grid grid-cols-1 items-start gap-10 lg:grid-cols-12 lg:gap-14">
+        {/* Left: the moment. An inverted panel that stays beside the order on desktop. */}
+        <div className="lg:sticky lg:top-[calc(var(--spacing-header)+1.5rem)] lg:col-span-7">
+          <div className="scheme-invert flex flex-col px-6 py-10 sm:px-10 sm:py-14 lg:px-14 lg:py-16">
+            {/* Live region: announces "Confirming" turning into "Thank you" when AutoRefresh re-renders. */}
+            <header aria-live="polite">
+              <div className="flex items-center gap-4">
+                {paid ? (
+                  <svg aria-hidden viewBox="0 0 48 48" className="size-11 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.25">
+                    <circle cx="24" cy="24" r="23" pathLength={1} strokeDasharray="1" className="motion-safe:animate-draw" />
+                    <path d="M15 24.5l6 6 12-13" pathLength={1} strokeDasharray="1" className="motion-safe:animate-draw motion-safe:[animation-delay:600ms]" />
+                  </svg>
+                ) : confirming || processing ? (
+                  <span aria-hidden className="size-5 shrink-0 animate-spin rounded-full border border-current border-t-transparent" />
+                ) : null}
+                <p className={`label ${order.status === "payment_failed" ? "text-danger" : "text-muted"}`}>
+                  {eyebrow} · {reference}
+                </p>
+              </div>
 
-      <div className="mx-auto mt-12 max-w-4xl md:mt-16">
-        <OrderDetails
-          order={order}
-          actions={
-            <>
-              {paid || processing || confirming ? (
-                <Link href="/new-arrivals" className="btn btn-primary sm:w-full">Continue shopping</Link>
+              {paid ? (
+                <h1 className="mt-10 text-display-lg font-medium tracking-tight sm:mt-14">
+                  <span className="block motion-safe:animate-rise">Thank you,</span>
+                  <span className="block motion-safe:animate-rise motion-safe:[animation-delay:150ms]">{firstName}.</span>
+                </h1>
               ) : (
-                <Link href="/bag" className="btn btn-primary sm:w-full">Return to your bag</Link>
+                <h1 className="mt-10 max-w-xl text-display font-medium tracking-tight motion-safe:animate-rise sm:mt-14">{title}</h1>
               )}
-              <Link href={`/account/orders/${order.id}`} className="btn btn-secondary sm:w-full">View in your account</Link>
-            </>
-          }
-        />
+              <p className="mt-6 max-w-md text-base leading-relaxed text-muted motion-safe:animate-rise motion-safe:[animation-delay:300ms]">{body}</p>
+              {confirming && <AutoRefresh />}
+            </header>
+
+            {onItsWay && (
+              <div className="mt-12 motion-safe:animate-rise motion-safe:[animation-delay:450ms] lg:mt-16">
+                <h2 className="label">What happens next</h2>
+                <ol className="mt-5 border-t border-line">
+                  {steps.map((s, n) => (
+                    <li key={s.title} className="grid grid-cols-[2.5rem_1fr] gap-4 border-b border-line py-5">
+                      <span className="label pt-0.5 text-muted tabular-nums">0{n + 1}</span>
+                      <div>
+                        <h3 className="label">{s.title}</h3>
+                        <p className="mt-2 text-muted">{s.body}</p>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+                <p className="mt-5 text-muted">Changed your mind? Returns are free within 30 days.</p>
+              </div>
+            )}
+
+            <div className="mt-10 flex flex-col gap-3 sm:flex-row lg:mt-12">
+              {onItsWay ? (
+                <Link href="/new-arrivals" className="btn btn-primary">Continue shopping</Link>
+              ) : (
+                <Link href="/bag" className="btn btn-primary">Return to your bag</Link>
+              )}
+              <Link href={`/account/orders/${order.id}`} className="btn btn-secondary">View in your account</Link>
+            </div>
+          </div>
+        </div>
+
+        {/* Right: what they bought. */}
+        <div className="lg:col-span-5 lg:pt-4">
+          <div className="flex items-baseline justify-between gap-4 border-b border-line pb-4">
+            <h2 className="label">Your order</h2>
+            <p className="label text-muted">{pieces} {pieces === 1 ? "piece" : "pieces"}</p>
+          </div>
+          <ul className={`mt-8 grid gap-x-4 gap-y-10 ${order.items.length === 1 ? "grid-cols-1 sm:max-w-sm" : "grid-cols-2"}`}>
+            {order.items.map((i) => (
+              <li key={i.id}>
+                <Link href={`/products/${i.slug}`} className="group block">
+                  <div className="media-product">
+                    {i.imageUrl && <Image src={i.imageUrl} alt={i.imageAlt} fill sizes="(min-width: 1024px) 20vw, (min-width: 640px) 40vw, 50vw" />}
+                    {i.quantity > 1 && <span className="label absolute top-3 left-3 bg-paper px-2 py-1 tabular-nums">× {i.quantity}</span>}
+                  </div>
+                  <p className="mt-4 group-hover:underline group-hover:underline-offset-4">{i.name}</p>
+                </Link>
+                <p className="mt-1 text-muted">{[i.size && `Size ${i.size}`, `Qty ${i.quantity}`].filter(Boolean).join(" · ")}</p>
+                <p className="mt-1 tabular-nums">
+                  {formatCents(i.unitPriceCents * i.quantity)}
+                  {i.quantity > 1 && <span className="text-muted"> · {formatCents(i.unitPriceCents)} each</span>}
+                </p>
+              </li>
+            ))}
+          </ul>
+          <OrderTotals order={order} className="rule mt-10 pt-6" />
+          <OrderDelivery order={order} className="mt-10" />
+        </div>
       </div>
     </section>
   );

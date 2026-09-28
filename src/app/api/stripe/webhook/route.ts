@@ -2,7 +2,7 @@
 // server-side sessions.retrieve() fallback, never from the browser. Keep /api/** out of any auth proxy:
 // Stripe sends no cookie.
 import type Stripe from "stripe";
-import { applyCheckoutSession } from "@/lib/orders";
+import { applyChargeRefund, applyCheckoutSession } from "@/lib/orders";
 import { CHECKOUT_EVENTS, type CheckoutEvent } from "@/lib/order-rules";
 import { stripe, webhookSecret } from "@/lib/stripe";
 
@@ -28,13 +28,17 @@ export async function POST(req: Request) {
     return new Response("Invalid signature", { status: 400 });
   }
 
-  if (!(CHECKOUT_EVENTS as readonly string[]).includes(event.type)) return Response.json({ received: true });
+  const refund = event.type === "charge.refunded";
+  if (!refund && !(CHECKOUT_EVENTS as readonly string[]).includes(event.type)) return Response.json({ received: true });
 
   try {
-    const result = await applyCheckoutSession(event.data.object as Stripe.Checkout.Session, event.type as CheckoutEvent);
+    // Refunds are issued in the Stripe Dashboard; charge.refunded carries the cumulative amount_refunded.
+    const result = refund
+      ? await applyChargeRefund(event.data.object as Stripe.Charge)
+      : await applyCheckoutSession(event.data.object as Stripe.Checkout.Session, event.type as CheckoutEvent);
     if (!result) console.warn(`[stripe webhook] ${event.type} ${event.id}: no matching order`);
   } catch (e) {
-    // 500 makes Stripe retry; applyCheckoutSession is idempotent, so a retry is always safe.
+    // 500 makes Stripe retry; both apply functions are idempotent, so a retry is always safe.
     console.error(`[stripe webhook] ${event.type} ${event.id} failed:`, e);
     return new Response("Processing failed", { status: 500 });
   }

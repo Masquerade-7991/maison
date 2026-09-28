@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { formatCents } from "@/lib/format";
 import { listOrdersForUser } from "@/lib/orders";
-import { orderReference, orderStatusCopy } from "@/lib/order-rules";
+import { fulfilmentStatusCopy, orderReference, orderStatusCopy, orderStatusTone, refundLabel } from "@/lib/order-rules";
 import { requireUser } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Orders | Maison" };
@@ -38,8 +38,9 @@ export default async function OrdersPage() {
                     {o.pieces > 1 && ` and ${o.pieces - 1} more`}
                   </span>
                 </span>
-                <span className={`label col-start-2 row-start-1 text-right sm:col-start-3 ${o.status === "payment_failed" ? "text-danger" : o.status === "paid" ? "" : "text-muted"}`}>
-                  {orderStatusCopy[o.status]}
+                <span className={`label col-start-2 row-start-1 text-right sm:col-start-3 ${o.fulfilmentStatus === "cancelled" ? "text-muted" : orderStatusTone[o.status]}`}>
+                  {o.status === "paid" ? fulfilmentStatusCopy[o.fulfilmentStatus] : orderStatusCopy[o.status]}
+                  {o.refundedCents > 0 && <span className="block text-muted">{refundLabel(o.refundedCents, o.totalCents, formatCents)}</span>}
                 </span>
                 <span className="col-start-2 row-start-2 text-right tabular-nums sm:col-start-4 sm:row-start-1">{formatCents(o.totalCents)}</span>
               </Link>

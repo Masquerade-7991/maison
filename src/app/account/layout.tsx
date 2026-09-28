@@ -13,7 +13,7 @@ export default async function AccountLayout({ children }: LayoutProps<"/account"
         <p className="label text-muted">My account</p>
         <h1 className="mt-3 text-display-sm">{firstName ? `Hello, ${firstName}` : "Your account"}</h1>
       </header>
-      <div className="mt-6 grid gap-8 md:mt-10 md:grid-cols-12 md:gap-10">
+      <div className="mt-6 grid grid-cols-1 gap-8 md:mt-10 md:grid-cols-12 md:gap-10">
         <div className="md:col-span-3">
           <AccountNav isAdmin={session?.user.role === "admin"} />
         </div>

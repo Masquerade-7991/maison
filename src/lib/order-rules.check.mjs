@@ -1,6 +1,6 @@
 // node src/lib/order-rules.check.mjs
 import assert from "node:assert/strict";
-import { CHECKOUT_EVENTS, nextStatus, sessionEvent } from "./order-rules.ts";
+import { CHECKOUT_EVENTS, nextFulfilment, nextStatus, refundLabel, sessionEvent } from "./order-rules.ts";
 
 const C = "checkout.session.completed";
 const OK = "checkout.session.async_payment_succeeded";
@@ -41,5 +41,28 @@ assert.equal(via("pending", "expired", "unpaid"), "expired");
 assert.equal(via("pending", "open", "unpaid"), null, "customer hasn't paid: nothing inferred");
 assert.equal(via("pending", "complete", "something_new"), null, "unknown payment_status is never paid");
 for (const s of ["paid", "payment_failed", "expired"]) assert.equal(via(s, "complete", "paid"), null, `${s} never moves`);
+
+// Fulfilment: admin-driven, paid orders only, forward only.
+const T = { carrier: "UPS", trackingNumber: "1Z999" };
+assert.equal(nextFulfilment("paid", "unfulfilled", "ship", T), "shipped");
+assert.equal(nextFulfilment("paid", "unfulfilled", "ship"), null, "shipping needs tracking");
+assert.equal(nextFulfilment("paid", "unfulfilled", "ship", { carrier: "UPS", trackingNumber: "  " }), null, "blank tracking number");
+assert.equal(nextFulfilment("paid", "unfulfilled", "ship", { carrier: "", trackingNumber: "1Z999" }), null, "blank carrier");
+assert.equal(nextFulfilment("paid", "shipped", "deliver"), "delivered");
+assert.equal(nextFulfilment("paid", "unfulfilled", "cancel"), "cancelled");
+assert.equal(nextFulfilment("paid", "shipped", "cancel"), null, "no cancel after shipping");
+assert.equal(nextFulfilment("paid", "unfulfilled", "deliver"), null, "deliver needs shipped first");
+assert.equal(nextFulfilment("paid", "shipped", "ship", T), null, "no re-ship");
+for (const f of ["delivered", "cancelled"])
+  for (const a of ["ship", "deliver", "cancel"]) assert.equal(nextFulfilment("paid", f, a, T), null, `${f} is final`);
+for (const s of ["pending", "processing", "payment_failed", "expired"])
+  for (const a of ["ship", "deliver", "cancel"]) assert.equal(nextFulfilment(s, "unfulfilled", a, T), null, `${s} can't be fulfilled`);
+
+// Refunds: derived from Stripe's cumulative amount_refunded, never a status.
+const fmt = (c) => `$${(c / 100).toFixed(2)}`;
+assert.equal(refundLabel(0, 5000, fmt), null, "nothing refunded");
+assert.equal(refundLabel(1250, 5000, fmt), "Partially refunded ($12.50)");
+assert.equal(refundLabel(5000, 5000, fmt), "Refunded", "full refund");
+assert.equal(refundLabel(6000, 5000, fmt), "Refunded", "over the stored total still reads as refunded");
 
 console.log("order rules ok");

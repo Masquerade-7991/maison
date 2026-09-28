@@ -10,6 +10,12 @@ const [email, role] = process.argv.slice(2);
 
 async function main() {
   if (!email || !roles.includes(role)) throw new Error("Usage: npm run auth:set-role -- <email> <customer|admin>");
+  const [found] = await db.select({ emailVerified: user.emailVerified }).from(user).where(eq(user.email, email.toLowerCase()));
+  if (!found) throw new Error(`No account with email ${email}. Sign up and verify the address first.`);
+  // An unverified row may belong to someone who typed another person's address: never make it an admin.
+  if (role === "admin" && !found.emailVerified) {
+    throw new Error(`${email} hasn't verified its email yet. Open the verification link, then run this again.`);
+  }
   const updated = await db
     .update(user)
     .set({ role })

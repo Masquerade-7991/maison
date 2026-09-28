@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { OrderDetails } from "@/components/order-details";
+import { formatCents } from "@/lib/format";
 import { applyCheckoutSession, getOrderForUser } from "@/lib/orders";
-import { orderReference, orderStatusCopy, sessionEvent } from "@/lib/order-rules";
+import { fulfilmentStatusCopy, orderReference, orderStatusCopy, orderStatusTone, refundLabel, sessionEvent } from "@/lib/order-rules";
 import { requireUser } from "@/lib/session";
 import { stripe } from "@/lib/stripe";
 
@@ -38,6 +39,19 @@ export default async function OrderPage({ params }: PageProps<"/account/orders/[
     }
   }
 
+  const paid = order.status === "paid";
+  const cancelled = paid && order.fulfilmentStatus === "cancelled";
+  const refund = refundLabel(order.refundedCents, order.amountTotalCents ?? order.subtotalCents, formatCents);
+  const note = !paid
+    ? statusNote[order.status]
+    : order.fulfilmentStatus === "shipped"
+      ? `Shipped ${order.shippedAt ? date.format(order.shippedAt) : ""} with ${order.carrier}. Tracking number: ${order.trackingNumber}.`
+      : order.fulfilmentStatus === "delivered"
+        ? `Delivered ${order.deliveredAt ? date.format(order.deliveredAt) : ""} by ${order.carrier} (tracking number ${order.trackingNumber}).`
+        : cancelled
+          ? "This order was cancelled and will not be sent. Your payment will be refunded to your original payment method."
+          : "Your payment is confirmed and we are preparing your pieces. We'll email you when they ship.";
+
   return (
     <>
       <Link href="/account/orders" className="label link-nav text-muted hover:text-ink">← All orders</Link>
@@ -46,13 +60,14 @@ export default async function OrderPage({ params }: PageProps<"/account/orders/[
           <h2 className="text-display-sm">Order {orderReference(order.id)}</h2>
           <p className="mt-2 text-muted">Placed {date.format(order.createdAt)}{order.paidAt && ` · Paid ${date.format(order.paidAt)}`}</p>
         </div>
-        <p className={`label ${order.status === "payment_failed" ? "text-danger" : order.status === "paid" ? "" : "text-muted"}`}>
-          {orderStatusCopy[order.status]}
+        <p className={`label ${cancelled ? "text-muted" : orderStatusTone[order.status]}`}>
+          {paid ? fulfilmentStatusCopy[order.fulfilmentStatus] : orderStatusCopy[order.status]}
+          {refund && <span className="text-muted"> · {refund}</span>}
         </p>
       </header>
-      {statusNote[order.status] && <p className="mt-6 border-l-2 border-line pl-4 text-muted">{statusNote[order.status]}</p>}
+      {note && <p className="mt-6 border-l-2 border-line pl-4 text-muted">{note}</p>}
       <div className="mt-8">
-        <OrderDetails order={order} wide={false} />
+        <OrderDetails order={order} />
       </div>
     </>
   );

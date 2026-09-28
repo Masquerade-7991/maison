@@ -5,7 +5,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getBag } from "@/lib/cart";
-import { applyCheckoutSession, attachSession, createPendingOrder, expireIfPending, pendingOrdersFor } from "@/lib/orders";
+import { applyCheckoutSession, attachSession, createPendingOrder, expireIfPending, unsettledOrdersFor } from "@/lib/orders";
 import { sessionEvent } from "@/lib/order-rules";
 import { getSession } from "@/lib/session";
 import { stripe } from "@/lib/stripe";
@@ -41,9 +41,11 @@ export async function startCheckoutAction(): Promise<CheckoutState> {
 
   // Only the newest checkout may be paid: close this user's older sessions that are still open.
   // One that already completed is applied as Stripe reports it (webhook late or missing), so a paid
-  // order is never left pending and its pieces are never charged a second time.
+  // order is never left pending and its pieces are never charged a second time. A completed but
+  // unpaid (processing) order keeps its pieces in the bag, so it blocks checkout until it settles.
   let settled = false;
-  for (const o of await pendingOrdersFor(user.id)) {
+  let confirming = false;
+  for (const o of await unsettledOrdersFor(user.id)) {
     if (!o.sessionId) {
       await expireIfPending(o.id);
       continue;
@@ -54,15 +56,21 @@ export async function startCheckoutAction(): Promise<CheckoutState> {
       if (old.status !== "complete") await expireIfPending(o.id);
       else {
         const ev = sessionEvent(old.status, old.payment_status);
-        if (ev && (await applyCheckoutSession(old, ev))?.changed) settled = true;
+        const r = ev ? await applyCheckoutSession(old, ev) : null;
+        if (r?.status === "paid") settled = true; // by this call or a concurrent webhook: the bag read above is stale
+        else if ((r?.status ?? o.status) === "processing") confirming = true;
       }
     } catch (e) {
       console.error("[checkout] could not close older session", o.sessionId, e);
+      if (o.status === "processing") confirming = true;
     }
   }
   if (settled) {
     revalidatePath("/bag");
     return { error: "An earlier payment has just been confirmed, and those pieces have left your bag. Please review it before checking out again." };
+  }
+  if (confirming) {
+    return { error: "An earlier payment is still being confirmed, so its pieces remain in your bag. Please check your orders before checking out again." };
   }
 
   const { orderId, items } = await createPendingOrder(user.id, bag);

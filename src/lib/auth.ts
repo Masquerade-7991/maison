@@ -38,6 +38,18 @@ export const auth = betterAuth({
         link: url, // shown on the page instead, when email is off in development
       }),
   },
+  // Production only (Better Auth's default): in dev every request comes from localhost with no client IP,
+  // so all of them would share one bucket, and dev runs against the live database table.
+  // Stored in Postgres (`rate_limit`) so limits hold across serverless instances and restarts.
+  // Keys are paths without the /api/auth base. Sign-in also re-sends the verification link (sendOnSignIn).
+  rateLimit: {
+    storage: "database",
+    customRules: {
+      "/sign-in/email": { window: 60, max: 5 },
+      "/sign-up/email": { window: 60, max: 3 },
+      "/send-verification-email": { window: 300, max: 3 },
+    },
+  },
   hooks: {
     before: createAuthMiddleware(async (ctx) => {
       // An unverified account whose link has expired can never be verified, so it stops reserving the

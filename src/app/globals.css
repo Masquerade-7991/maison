@@ -41,6 +41,40 @@
   --accent: #f5f5f5;
 }
 
+/* An inverted panel: the other theme's tokens, so every utility inside (btn-primary, label, text-muted,
+   rule) works unchanged on it. Black-on-white pages get a black panel, dark pages a light one. */
+.scheme-invert {
+  color-scheme: dark;
+  --paper: #0a0a0a;
+  --ink: #f5f5f5;
+  --surface: #161616;
+  --muted: #9a9a9a;
+  --line: #2a2a2a;
+  --accent: #f5f5f5;
+  background-color: var(--paper);
+  color: var(--ink);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .scheme-invert {
+    color-scheme: light;
+    --paper: #ffffff;
+    --ink: #000000;
+    --surface: #f5f5f5;
+    --muted: #6e6e6e;
+    --line: #e3e3e3;
+    --accent: #000000;
+  }
+}
+:root[data-theme="dark"] .scheme-invert {
+  color-scheme: light;
+  --paper: #ffffff;
+  --ink: #000000;
+  --surface: #f5f5f5;
+  --muted: #6e6e6e;
+  --line: #e3e3e3;
+  --accent: #000000;
+}
+
 /* dark: variant matches the same rule as the tokens above. */
 @custom-variant dark {
   &:where([data-theme="dark"], [data-theme="dark"] *) {
@@ -104,6 +138,20 @@
   /* Motion */
   --ease-out-soft: cubic-bezier(0.2, 0.7, 0.2, 1);
   --default-transition-duration: 200ms;
+  /* Entrance moments (order confirmation). Reduced motion collapses them below. */
+  --animate-rise: rise 900ms var(--ease-out-soft) both;
+  --animate-draw: draw 700ms var(--ease-out-soft) 200ms both;
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(1.25rem);
+    }
+  }
+  @keyframes draw {
+    from {
+      stroke-dashoffset: 1;
+    }
+  }
 
   /* Product imagery */
   --aspect-product: 4 / 5;

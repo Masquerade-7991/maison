@@ -60,3 +60,57 @@ export const orderStatusCopy: Record<OrderStatus, string> = {
   payment_failed: "Payment failed",
   expired: "Checkout expired",
 };
+
+/** Text colour for each status, shared by the order list and the order page. */
+export const orderStatusTone: Record<OrderStatus, string> = {
+  pending: "text-muted",
+  processing: "text-muted",
+  paid: "",
+  payment_failed: "text-danger",
+  expired: "text-muted",
+};
+
+/**
+ * Refund wording, derived from Stripe's cumulative refunded amount (refunds are issued in the Stripe
+ * Dashboard and recorded by the charge.refunded webhook). Kept beside `status`, which stays "paid".
+ * The formatter is passed in so this file stays import-free for the check script; pass formatCents.
+ */
+export function refundLabel(refundedCents: number, totalCents: number, format: (cents: number) => string): string | null {
+  if (refundedCents <= 0) return null;
+  return refundedCents >= totalCents ? "Refunded" : `Partially refunded (${format(refundedCents)})`;
+}
+
+// Fulfilment: what happened to a paid order after payment. Set by an admin, never by Stripe, and kept
+// apart from `status` so the payment state machine above stays Stripe-driven.
+export type FulfilmentStatus = "unfulfilled" | "shipped" | "delivered" | "cancelled";
+export type FulfilmentAction = "ship" | "deliver" | "cancel";
+
+/**
+ * The fulfilment status an admin action leads to, or null when it isn't allowed. Only paid orders are
+ * fulfilled, and only forward: unfulfilled → shipped (needs a carrier and tracking number) → delivered,
+ * or unfulfilled → cancelled. A shipped order can't be cancelled.
+ */
+export function nextFulfilment(
+  payment: OrderStatus,
+  current: FulfilmentStatus,
+  action: FulfilmentAction,
+  tracking?: { carrier?: string | null; trackingNumber?: string | null },
+): FulfilmentStatus | null {
+  if (payment !== "paid") return null;
+  switch (action) {
+    case "ship":
+      return current === "unfulfilled" && tracking?.carrier?.trim() && tracking.trackingNumber?.trim() ? "shipped" : null;
+    case "deliver":
+      return current === "shipped" ? "delivered" : null;
+    case "cancel":
+      return current === "unfulfilled" ? "cancelled" : null;
+  }
+}
+
+/** Wording for each fulfilment status (customer and admin). */
+export const fulfilmentStatusCopy: Record<FulfilmentStatus, string> = {
+  unfulfilled: "Preparing",
+  shipped: "Shipped",
+  delivered: "Delivered",
+  cancelled: "Cancelled",
+};

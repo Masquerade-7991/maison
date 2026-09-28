@@ -1,0 +1,2 @@
+ALTER TABLE "orders" ADD COLUMN "refunded_cents" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE "orders" ADD CONSTRAINT "orders_refunded_non_negative" CHECK ("orders"."refunded_cents" >= 0);

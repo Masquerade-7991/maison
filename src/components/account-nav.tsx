@@ -1,7 +1,5 @@
-"use client";
-
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { SectionNav } from "@/components/section-nav";
 import { SignOutButton } from "@/components/sign-out-button";
 
 const sections = [
@@ -9,36 +7,17 @@ const sections = [
   { href: "/account/orders", label: "Orders" },
 ];
 
-// Tab row on phones (like the listing tabs), sidebar from tablet up.
 export function AccountNav({ isAdmin }: { isAdmin: boolean }) {
-  const pathname = usePathname();
   return (
-    <nav aria-label="Account" className="-mx-gutter overflow-x-auto px-gutter scrollbar-none md:mx-0 md:px-0">
-      <ul className="flex items-center gap-7 whitespace-nowrap md:flex-col md:items-start md:gap-4">
-        {sections.map((s) => {
-          // /account/orders/<id> keeps "Orders" current; "/account" only matches itself.
-          const current = pathname === s.href || (s.href !== "/account" && pathname.startsWith(`${s.href}/`));
-          return (
-            <li key={s.href}>
-              <Link
-                href={s.href}
-                aria-current={current ? "page" : undefined}
-                className={`label link-nav ${current ? "underline underline-offset-4" : "text-muted hover:text-ink"}`}
-              >
-                {s.label}
-              </Link>
-            </li>
-          );
-        })}
-        {isAdmin && (
-          <li>
-            <Link href="/admin" className="label link-nav text-muted hover:text-ink">Admin</Link>
-          </li>
-        )}
-        <li className="md:rule md:mt-2 md:w-full md:pt-6">
-          <SignOutButton className="label link-nav cursor-pointer text-muted hover:text-ink disabled:cursor-wait" />
+    <SectionNav label="Account" sections={sections} root="/account">
+      {isAdmin && (
+        <li>
+          <Link href="/admin" className="label link-nav text-muted hover:text-ink">Admin</Link>
         </li>
-      </ul>
-    </nav>
+      )}
+      <li className="md:rule md:mt-2 md:w-full md:pt-6">
+        <SignOutButton className="label link-nav cursor-pointer text-muted hover:text-ink disabled:cursor-wait" />
+      </li>
+    </SectionNav>
   );
 }
