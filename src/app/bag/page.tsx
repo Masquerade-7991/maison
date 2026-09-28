@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { BagLineControls } from "@/components/bag-line-controls";
+import { CheckoutButton } from "@/components/checkout-button";
 import { ProductCard } from "@/components/product-card";
 import { getBag } from "@/lib/cart";
 import { lineTotalCents, type BagLine } from "@/lib/cart-rules";
@@ -15,8 +16,9 @@ export const metadata: Metadata = { title: "Your bag | Maison" };
 
 const pieces = (n: number) => `${n} ${n === 1 ? "piece" : "pieces"}`;
 
-export default async function BagPage() {
+export default async function BagPage({ searchParams }: PageProps<"/bag">) {
   const { user } = await requireUser("/bag");
+  const cancelled = (await searchParams).checkout === "cancelled";
   const bag = await getBag(user.id);
   const empty = bag.lines.length === 0;
   const suggestions = empty ? await getNewArrivals(4) : [];
@@ -60,6 +62,11 @@ export default async function BagPage() {
       ) : (
         <div className="grid gap-12 lg:grid-cols-12 lg:gap-16">
           <div className="lg:col-span-8">
+            {cancelled && (
+              <p role="status" className="mt-8 border-l-2 border-ink pl-4">
+                Checkout was cancelled and nothing was charged. Your bag is saved.
+              </p>
+            )}
             {bag.hasIssues && (
               <p role="status" className="mt-8 border-l-2 border-danger pl-4 text-danger">
                 Availability has changed for some pieces since you added them. Please review the items marked below.
@@ -90,14 +97,10 @@ export default async function BagPage() {
                   <dd className="text-display-sm tabular-nums">{formatCents(bag.subtotalCents)}</dd>
                 </div>
               </dl>
-              <p className="mt-2 text-right text-muted">
-                {bag.payableCount < bag.itemCount ? "Excludes sold-out pieces. " : ""}Taxes calculated at checkout
-              </p>
-              <button type="button" disabled aria-describedby="checkout-note" className="btn btn-primary mt-8 sm:w-full">
-                Checkout
-              </button>
+              {bag.payableCount < bag.itemCount && <p className="mt-2 text-right text-muted">Excludes sold-out pieces.</p>}
+              <CheckoutButton blocked={bag.hasIssues} />
               <p id="checkout-note" className="mt-3 text-center text-muted">
-                {bag.hasIssues ? "Review the marked pieces before checking out." : "Online checkout opens soon."}
+                {bag.hasIssues ? "Review the marked pieces before checking out." : "Secure payment by Stripe. You'll add delivery details next."}
               </p>
             </div>
             <ul className="mt-8 space-y-5 px-1">

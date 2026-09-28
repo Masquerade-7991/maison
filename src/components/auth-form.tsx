@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { authClient } from "@/lib/auth-client";
+import { getDevVerificationLink } from "@/lib/dev-email-actions";
 import {
   PASSWORD_MAX,
   PASSWORD_MIN,
@@ -34,6 +35,8 @@ export function AuthForm({ mode, next }: { mode: AuthMode; next: string }) {
   const [pending, setPending] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [sentTo, setSentTo] = useState<string | null>(null);
+  // Development only (no email provider): the verification link, shown on the page instead of emailed.
+  const [devLink, setDevLink] = useState<string | null>(null);
 
   const focus = (field: AuthField) => (formRef.current?.elements.namedItem(field) as HTMLInputElement | null)?.focus();
 
@@ -60,6 +63,7 @@ export function AuthForm({ mode, next }: { mode: AuthMode; next: string }) {
     const values = { name: String(form.get("name") ?? ""), email: String(form.get("email")).trim(), password: String(form.get("password")) };
     setFormError(null);
     setNotice(null);
+    setDevLink(null);
 
     const found = validate(mode, values);
     setErrors(found);
@@ -80,12 +84,19 @@ export function AuthForm({ mode, next }: { mode: AuthMode; next: string }) {
         router.refresh();
         return; // stay "pending" while the next page loads
       }
+      const code = error?.code ?? "";
+      // A link exists only after a real sign-up or an unverified sign-in, and only in development.
+      const link = !error || code === "EMAIL_NOT_VERIFIED" ? await getDevVerificationLink(values.email).catch(() => null) : null;
       // Re-enable the fieldset now, so a field can take focus below (disabled inputs can't).
       flushSync(() => setPending(false));
+      setDevLink(link);
       if (!error) return setSentTo(values.email);
-      const code = error.code ?? "";
       if (code === "EMAIL_NOT_VERIFIED") {
-        setNotice(`Please verify your email first. We've sent a new link to ${values.email}.`);
+        setNotice(
+          link
+            ? "Please verify your email first. Email is switched off in development, so use the link below."
+            : `Please verify your email first. We've sent a new link to ${values.email}.`,
+        );
       } else if (fieldErrors[code]) {
         const [field, message] = fieldErrors[code];
         setErrors({ [field]: message });
@@ -101,6 +112,20 @@ export function AuthForm({ mode, next }: { mode: AuthMode; next: string }) {
       setPending(false);
       setFormError("We couldn't reach Maison. Check your connection and try again.");
     }
+  }
+
+  if (sentTo && devLink) {
+    return (
+      <div role="status" className="text-center">
+        <p className="label text-muted">Development mode</p>
+        <p className="mt-3 text-display-sm">Verify your email</p>
+        <p className="mt-3">
+          Email sending is switched off, so here&apos;s the link for <span className="font-medium">{sentTo}</span>.
+        </p>
+        <a href={devLink} className="btn btn-primary mt-8 sm:w-full">Verify email and continue</a>
+        <p className="mt-4 text-muted">It works once and expires in an hour. It&apos;s also printed in the dev server terminal.</p>
+      </div>
+    );
   }
 
   if (sentTo) {
@@ -172,7 +197,12 @@ export function AuthForm({ mode, next }: { mode: AuthMode; next: string }) {
           <FieldError field="password" errors={errors} />
         </div>
 
-        {notice && <p role="status" className="border-l-2 border-ink pl-4">{notice}</p>}
+        {notice && (
+          <div role="status" className="border-l-2 border-ink pl-4">
+            <p>{notice}</p>
+            {devLink && <a href={devLink} className="label link mt-3 inline-block">Verify email and continue</a>}
+          </div>
+        )}
         {formError && <p role="alert" className="border-l-2 border-danger pl-4 text-danger">{formError}</p>}
 
         <button type="submit" className="btn btn-primary sm:w-full">

@@ -39,6 +39,7 @@ export async function getBag(userId: string): Promise<Bag> {
     const allowed = maxAllowed(r);
     const productTotal = productTotals.get(r.productId)!;
     return {
+      productId: r.productId,
       slug: r.slug,
       name: r.name,
       colour: r.colour,

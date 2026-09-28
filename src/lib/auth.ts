@@ -35,6 +35,7 @@ export const auth = betterAuth({
         to: user.email,
         subject: "Verify your email for Maison",
         text: `Confirm your Maison account by opening this link within an hour:\n\n${url}`,
+        link: url, // shown on the page instead, when email is off in development
       }),
   },
   hooks: {

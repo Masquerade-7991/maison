@@ -122,6 +122,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       suppressHydrationWarning // themeScript may set data-theme before React hydrates
     >
       <head>
+        {/* The pattern from Next's "Preventing flash before hydration" guide. In development React logs
+            "Encountered a script tag…" when this layout re-renders on the client (router.refresh, 404s);
+            that warning is dev-only and harmless: the script already ran during HTML parsing. */}
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body className="min-h-full flex flex-col">

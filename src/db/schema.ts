@@ -4,6 +4,7 @@ import {
   check,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   primaryKey,
@@ -216,4 +217,65 @@ export const cartItems = pgTable(
 export const cartItemsRelations = relations(cartItems, ({ one }) => ({
   user: one(user, { fields: [cartItems.userId], references: [user.id] }),
   product: one(products, { fields: [cartItems.productId], references: [products.id] }),
+}));
+
+// ─── Orders ──────────────────────────────────────────────────────────────────
+// Created "pending" when checkout starts (prices and items snapshotted from our DB), then moved
+// forward only by Stripe-verified events via applyCheckoutSession in src/lib/orders.ts.
+export const orderStatus = pgEnum("order_status", ["pending", "processing", "paid", "payment_failed", "expired"]);
+
+export const orders = pgTable(
+  "orders",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    // Financial record: never cascaded away with the user.
+    userId: text().notNull().references(() => user.id, { onDelete: "restrict" }),
+    status: orderStatus().notNull().default("pending"),
+    subtotalCents: integer().notNull(), // from our products table at checkout start
+    amountTotalCents: integer(), // what Stripe reports it charged, set on payment
+    currency: text().notNull().default("usd"),
+    stripeCheckoutSessionId: text().unique(),
+    stripePaymentIntentId: text(),
+    customerEmail: text(),
+    shippingName: text(),
+    shippingAddress: jsonb(), // Stripe's collected address, as returned
+    stockShortfall: boolean().notNull().default(false), // stock was below the order when it was paid (oversell)
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+    paidAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [
+    index("orders_user_created_idx").on(t.userId, t.createdAt.desc()),
+    check("orders_subtotal_positive", sql`${t.subtotalCents} > 0`),
+  ],
+);
+
+export const orderItems = pgTable(
+  "order_items",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    orderId: uuid().notNull().references(() => orders.id, { onDelete: "cascade" }),
+    // Snapshot below keeps the order readable if the product is later deleted.
+    productId: uuid().references(() => products.id, { onDelete: "set null" }),
+    slug: text().notNull(),
+    name: text().notNull(),
+    size: text().notNull().default(""),
+    unitPriceCents: integer().notNull(),
+    quantity: integer().notNull(),
+  },
+  (t) => [
+    index("order_items_order_idx").on(t.orderId),
+    check("order_items_quantity_positive", sql`${t.quantity} > 0`),
+    check("order_items_price_positive", sql`${t.unitPriceCents} > 0`),
+  ],
+);
+
+export const ordersRelations = relations(orders, ({ one, many }) => ({
+  user: one(user, { fields: [orders.userId], references: [user.id] }),
+  items: many(orderItems),
+}));
+
+export const orderItemsRelations = relations(orderItems, ({ one }) => ({
+  order: one(orders, { fields: [orderItems.orderId], references: [orders.id] }),
+  product: one(products, { fields: [orderItems.productId], references: [products.id] }),
 }));

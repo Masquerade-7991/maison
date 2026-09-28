@@ -30,6 +30,7 @@ export const lineIssue = (allowed: number, productTotal: number): BagIssue =>
   allowed === 0 ? "sold_out" : productTotal > allowed ? "over_stock" : null;
 
 export type BagLine = {
+  productId: string;
   slug: string;
   name: string;
   colour: string;

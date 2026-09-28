@@ -4,8 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { SignOutButton } from "@/components/sign-out-button";
 
-// Account sections. Order history slots in here as /account/orders when it exists.
-const sections = [{ href: "/account", label: "Account details" }];
+const sections = [
+  { href: "/account", label: "Account details" },
+  { href: "/account/orders", label: "Orders" },
+];
 
 // Tab row on phones (like the listing tabs), sidebar from tablet up.
 export function AccountNav({ isAdmin }: { isAdmin: boolean }) {
@@ -14,7 +16,8 @@ export function AccountNav({ isAdmin }: { isAdmin: boolean }) {
     <nav aria-label="Account" className="-mx-gutter overflow-x-auto px-gutter scrollbar-none md:mx-0 md:px-0">
       <ul className="flex items-center gap-7 whitespace-nowrap md:flex-col md:items-start md:gap-4">
         {sections.map((s) => {
-          const current = pathname === s.href;
+          // /account/orders/<id> keeps "Orders" current; "/account" only matches itself.
+          const current = pathname === s.href || (s.href !== "/account" && pathname.startsWith(`${s.href}/`));
           return (
             <li key={s.href}>
               <Link
