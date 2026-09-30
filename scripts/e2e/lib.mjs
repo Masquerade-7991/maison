@@ -30,6 +30,17 @@ export const testEmail = (tag) => `qa.${tag}+${Date.now()}@example.com`;
 
 export const pass = (m) => console.log(`PASS ${m}`);
 
+/** Runs a cleanup step and says so loudly (with the manual command) if it fails, e.g. on a network blip. */
+export function cleanup(label, fn, emails) {
+  try {
+    console.log(`cleanup: ${fn()}`);
+  } catch (e) {
+    console.log(`cleanup FAILED (${label}): ${e.message.split("\n")[0]}`);
+    console.log(`  finish it with: npx tsx scripts/e2e/db.mts cleanup ${emails.join(" ")}`);
+    process.exitCode = 1;
+  }
+}
+
 /**
  * Signs up and verifies a new account in its own browser context, returning a signed-in page.
  * Production allows 3 sign-ups per minute per client, so keep runs to a couple of accounts.

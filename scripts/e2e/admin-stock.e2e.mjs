@@ -3,7 +3,7 @@
 // neither open the page nor replay its Server Action. Run: node scripts/e2e/admin-stock.e2e.mjs (see lib.mjs).
 // Uses one seeded product and puts its stock back afterwards; the two test accounts are deleted.
 import assert from "node:assert/strict";
-import { BASE, db, launch, makeAdmin, pass, signUp, testEmail } from "./lib.mjs";
+import { BASE, cleanup, db, launch, makeAdmin, pass, signUp, testEmail } from "./lib.mjs";
 
 const SLUG = "wicker-top-handle-bag";
 const NAME = "Wicker top-handle bag";
@@ -147,6 +147,6 @@ try {
   process.exitCode = 1;
 } finally {
   await browser.close();
-  db("stock:set", SLUG, original);
-  console.log(`cleanup: ${SLUG} stock back to ${db("stock:get", SLUG)}; ${db("cleanup", ADMIN, CUSTOMER)}`);
+  cleanup("stock", () => (db("stock:set", SLUG, original), `${SLUG} stock back to ${db("stock:get", SLUG)}`), []);
+  cleanup("test accounts", () => db("cleanup", ADMIN, CUSTOMER), [ADMIN, CUSTOMER]);
 }

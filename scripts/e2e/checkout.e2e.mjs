@@ -2,7 +2,7 @@
 // the order shows as paid. Run: node scripts/e2e/checkout.e2e.mjs (see lib.mjs for the server).
 // Uses Stripe's test card, so no money moves; cleanup puts the stock back and deletes the account.
 import assert from "node:assert/strict";
-import { BASE, db, launch, pass, signUp, testEmail } from "./lib.mjs";
+import { BASE, cleanup, db, launch, pass, signUp, testEmail } from "./lib.mjs";
 
 const email = testEmail("checkout");
 const browser = await launch();
@@ -65,5 +65,5 @@ try {
   process.exitCode = 1;
 } finally {
   await browser.close();
-  console.log(`cleanup: ${db("cleanup", email)}`);
+  cleanup("test account", () => db("cleanup", email), [email]);
 }
