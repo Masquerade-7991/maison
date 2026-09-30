@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import type Stripe from "stripe";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { OrderDelivery, OrderTotals } from "@/components/order-details";
+import { emailIsOff } from "@/lib/email";
 import { formatCents } from "@/lib/format";
 import { applyCheckoutSession, getOrderForUser } from "@/lib/orders";
 import { orderReference, orderStatusCopy, sessionEvent } from "@/lib/order-rules";
@@ -57,8 +58,12 @@ export default async function CheckoutSuccessPage({ searchParams }: PageProps<"/
   const city = (order.shippingAddress as { city?: string | null } | null)?.city;
   const pieces = order.items.reduce((n, i) => n + i.quantity, 0);
 
+  // Email is off in development and on the test site (EMAIL_LINKS_ON_PAGE): don't promise a receipt then.
+  const receipts = !emailIsOff();
   const [eyebrow, title, body] = paid
-    ? ["Order confirmed", null, `Your order is confirmed and a receipt is on its way to ${email}. Here is what happens now.`]
+    ? ["Order confirmed", null, receipts
+        ? `Your order is confirmed and a receipt is on its way to ${email}. Here is what happens now.`
+        : "Your order is confirmed. Email is switched off on this site, so no receipt is sent: your order is saved under Account, Orders. Here is what happens now."]
     : confirming
       ? ["Confirming payment", "Confirming your order", "Stripe is confirming your payment with us. This usually takes a few seconds, and your order is safe if you leave this page."]
       : processing
@@ -71,8 +76,8 @@ export default async function CheckoutSuccessPage({ searchParams }: PageProps<"/
 
   const steps = [
     paid
-      ? { title: "Confirmed", body: <>Your receipt is in {email}. Quote <span className="whitespace-nowrap">{reference}</span> whenever you contact us.</> }
-      : { title: "Payment", body: "We prepare your order as soon as payment is confirmed, and email your receipt." },
+      ? { title: "Confirmed", body: <>{receipts ? <>Your receipt is in {email}. </> : null}Quote <span className="whitespace-nowrap">{reference}</span> whenever you contact us.</> }
+      : { title: "Payment", body: receipts ? "We prepare your order as soon as payment is confirmed, and email your receipt." : "We prepare your order as soon as payment is confirmed." },
     { title: "Wrapped and boxed", body: "Every piece is wrapped and boxed in our signature packaging, ready to give." },
     { title: "Express delivery", body: `Complimentary express delivery${city ? ` to ${city}` : ""}, with a signature on arrival.` },
   ];

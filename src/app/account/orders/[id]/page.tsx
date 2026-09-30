@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { OrderDetails } from "@/components/order-details";
+import { emailIsOff } from "@/lib/email";
 import { formatCents } from "@/lib/format";
 import { applyCheckoutSession, getOrderForUser } from "@/lib/orders";
 import { fulfilmentStatusCopy, orderReference, orderStatusCopy, orderStatusTone, refundLabel, sessionEvent } from "@/lib/order-rules";
@@ -50,7 +51,7 @@ export default async function OrderPage({ params }: PageProps<"/account/orders/[
         ? `Delivered ${order.deliveredAt ? date.format(order.deliveredAt) : ""} by ${order.carrier} (tracking number ${order.trackingNumber}).`
         : cancelled
           ? "This order was cancelled and will not be sent. Your payment will be refunded to your original payment method."
-          : "Your payment is confirmed and we are preparing your pieces. We'll email you when they ship.";
+          : `Your payment is confirmed and we are preparing your pieces.${emailIsOff() ? "" : " We'll email you when they ship."}`;
 
   return (
     <>
