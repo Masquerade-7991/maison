@@ -23,7 +23,7 @@ export async function updateStockAction(_prev: StockFormState, fd: FormData): Pr
   if (!isUuid(id) || expected === null) return { error: "This form is out of date. Reload the page and try again." };
   const next = parseStock(get("stockQuantity"));
   if (next === null) return { error: STOCK_ERROR, value: get("stockQuantity") };
-  if (next === expected) return { saved: true, stock: expected };
+  // No shortcut when the number is unchanged: the guarded write confirms it is still true.
   const result = await updateStock(id, expected, next);
   if (!result.ok) return { error: result.error, value: get("stockQuantity"), stock: result.currentStock };
   revalidatePath("/", "layout"); // the storefront is ISR: show the new stock at once

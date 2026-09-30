@@ -4,8 +4,10 @@ export type StockState = "in_stock" | "low_stock" | "made_to_order" | "sold_out"
 
 export const LOW_STOCK_THRESHOLD = 3;
 
+// Made to order with pieces on hand is "in stock", never "low": more can always be made, and the bag
+// allows the full 10 (maxAllowed), so "Only 2 left" would be false scarcity.
 export function stockState(p: { stockQuantity: number; madeToOrder: boolean }): StockState {
-  if (p.stockQuantity > LOW_STOCK_THRESHOLD) return "in_stock";
+  if (p.stockQuantity > LOW_STOCK_THRESHOLD || (p.madeToOrder && p.stockQuantity > 0)) return "in_stock";
   if (p.stockQuantity > 0) return "low_stock";
   return p.madeToOrder ? "made_to_order" : "sold_out";
 }

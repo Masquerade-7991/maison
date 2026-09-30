@@ -1,13 +1,19 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { updateStockAction } from "@/app/admin/stock/actions";
 import { Spinner } from "@/components/admin/form-parts";
 import { MAX_STOCK } from "@/lib/admin-rules";
 
 /** One product's quantity. Posts the number it loaded, so a sale made meanwhile isn't overwritten. */
 export function StockForm({ productId, name, stock }: { productId: string; name: string; stock: number }) {
-  const [state, formAction, pending] = useActionState(updateStockAction, null);
+  const [result, formAction, pending] = useActionState(updateStockAction, null);
+  // Remember which `stock` prop each action result arrived with. If the page later re-renders with a
+  // different, newer number (another row's save or a sale revalidated it), the server's number wins
+  // over this form's last result, so the next save doesn't hit an avoidable "stock changed" refusal.
+  const [seen, setSeen] = useState({ result, stock });
+  if (seen.result !== result) setSeen({ result, stock });
+  const state = result && (seen.stock === stock || result.stock === stock) ? result : null;
   const inputId = `stock-${productId}`;
 
   return (

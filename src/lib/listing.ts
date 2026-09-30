@@ -1,5 +1,6 @@
 // Listing filters, sorts and swatches. Pure functions over the mapped Product type, no db access.
 import type { Product } from "./products";
+import { isBuyable, stockState } from "./stock.ts"; // .ts extension: listing.check.mjs runs this file in Node
 
 export const colourSwatch: Record<string, string> = {
   Black: "#111111",
@@ -59,9 +60,9 @@ export function filterProducts<T extends Listable>(list: T[], f: Filters): T[] {
   if (f.sort === "price-asc") out.sort((a, b) => a.price - b.price);
   else if (f.sort === "price-desc") out.sort((a, b) => b.price - a.price);
   else if (f.sort === "newest") out.sort(newest);
-  // Featured: anything you can buy first, then newest. (Same rule as stockState's sold_out.)
+  // Featured: anything you can buy first, then newest.
   else {
-    const soldOut = (p: T) => Number(p.stockQuantity === 0 && !p.madeToOrder);
+    const soldOut = (p: T) => Number(!isBuyable(stockState(p)));
     out.sort((a, b) => soldOut(a) - soldOut(b) || newest(a, b));
   }
   return out;

@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { currency } from "@/lib/format";
 import type { Product } from "@/lib/products";
-import { stockState } from "@/lib/stock";
+import { stockCopy, stockState, stockTone } from "@/lib/stock";
 
 export function ProductCard({
   product: p,
@@ -15,7 +15,9 @@ export function ProductCard({
   showNew?: boolean;
 }) {
   const image = p.images[0];
-  const tag = stockState(p) === "sold_out" ? "Sold out" : showNew && p.isNew ? "New" : null;
+  const state = stockState(p);
+  const soldOut = state === "sold_out";
+  const tag = soldOut ? "Sold out" : showNew && p.isNew ? "New" : null;
 
   return (
     <Link href={`/products/${p.slug}`} className="group block">
@@ -27,6 +29,7 @@ export function ProductCard({
             fill
             preload={preload}
             sizes="(min-width: 1280px) 25vw, (min-width: 768px) 33vw, 50vw"
+            className={soldOut ? "opacity-50" : undefined}
           />
         )}
         {tag && <span className="label absolute top-3 left-3 bg-paper px-2 py-1">{tag}</span>}
@@ -43,6 +46,13 @@ export function ProductCard({
           <span className={p.compareAt !== null ? "text-ink" : "text-muted"}>{currency(p.price)}</span>
         </p>
       </div>
+      {/* Same dot and copy as the product page, so a card never promises more than the page will sell. */}
+      {state === "low_stock" && (
+        <p className="label mt-2 flex items-center gap-2">
+          <span aria-hidden className={`size-1.5 rounded-full ${stockTone[state]}`} />
+          {stockCopy(state, p.stockQuantity)}
+        </p>
+      )}
     </Link>
   );
 }

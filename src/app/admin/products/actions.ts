@@ -5,7 +5,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createProduct, updateProduct } from "@/lib/admin-catalogue";
-import { formValues as echo, isUuid, parseProductForm, reader, type FieldErrors } from "@/lib/admin-rules";
+import { formValues as echo, isUuid, parseProductForm, parseStock, reader, type FieldErrors } from "@/lib/admin-rules";
 import { assertAdmin } from "@/lib/session";
 
 export type ProductFormState = {
@@ -35,8 +35,8 @@ export async function createProductAction(_prev: ProductFormState, fd: FormData)
 export async function updateProductAction(_prev: ProductFormState, fd: FormData): Promise<ProductFormState> {
   await assertAdmin();
   const id = reader(fd)("id");
-  const expected = Number(reader(fd)("expectedStock"));
-  if (!isUuid(id) || !Number.isInteger(expected) || expected < 0) return { error: "This form is out of date. Reload the page and try again." };
+  const expected = parseStock(reader(fd)("expectedStock"));
+  if (!isUuid(id) || expected === null) return { error: "This form is out of date. Reload the page and try again." };
   const parsed = parseProductForm(reader(fd), { create: false });
   if (!parsed.ok) return { errors: parsed.errors, values: echo(fd) };
   const result = await updateProduct(id, parsed.value, expected); // the slug is never read on edit

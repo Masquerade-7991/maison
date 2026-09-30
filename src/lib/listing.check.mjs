@@ -30,6 +30,8 @@ assert.equal(s(1), "low_stock");
 assert.equal(s(0), "sold_out");
 assert.equal(s(0, true), "made_to_order");
 assert.equal(s(5, true), "in_stock", "stock on hand wins over made to order");
+assert.equal(s(2, true), "in_stock", "made to order with a few on hand is never 'Only 2 left'");
+assert.equal(s(2), "low_stock");
 assert.equal(stockCopy("low_stock", 2), "Only 2 left");
 assert.equal(isBuyable("sold_out"), false);
 assert.equal(isBuyable("made_to_order"), true);
