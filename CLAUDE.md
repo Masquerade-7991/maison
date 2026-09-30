@@ -63,7 +63,7 @@ Next.js 16 App Router, React 19, Tailwind v4 (PostCSS plugin only, no `tailwind.
 
 - `/contact` opens the contact form in a native `<dialog>`. `sendContactAction` (`src/lib/contact-actions.ts`) is a public Server Action: `parseContactForm` (`contact-rules.ts`) validates every field, a hidden `website` trap field is thanked but never sent, and **nothing is stored**. It mails `CONTACT_TO` through `sendEmail`; without `CONTACT_TO`, or while email is off, the message goes to the server log. The form has no rate limiting yet (add it if spam appears).
 - React 19 resets a form after its action and restores inputs from `defaultValue`, but not a `<select>`: key a select on each server reply (as the contact topic does) or it silently falls back to its first option.
-- `/about` is a static editorial page with an invented brand story. It alone uses a serif (Cormorant Garamond via `next/font/google`, headings only); everywhere else stays in Geist. The `reveal` utility in `globals.css` fades blocks in with scroll driven CSS and does nothing under reduced motion.
+- `/about` is a static editorial page with an invented brand story. It alone uses a serif (Cormorant Garamond, light only, self-hosted with `next/font/local` from `src/app/about/fonts/`); everywhere else stays in Geist. Don't add fonts through `next/font/google`: Turbopack fails the Vercel build when Google returns font URLs containing `&` (vercel/next.js#99114), even though local builds pass. The `reveal` utility in `globals.css` fades blocks in with scroll driven CSS and does nothing under reduced motion.
 
 ### Caching
 

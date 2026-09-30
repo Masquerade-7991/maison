@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Cormorant_Garamond } from "next/font/google";
+import localFont from "next/font/local";
 import Image from "next/image";
 import Link from "next/link";
 import { atelier, hero } from "@/lib/sample-data";
@@ -9,8 +9,15 @@ export const metadata: Metadata = {
   description: "Made slowly, since 1987: the story of Maison, from a two-room Florentine atelier to a circle of family workshops across Italy.",
 };
 
-// The About page's display serif only; the rest of the site stays in Geist.
-const serif = Cormorant_Garamond({ subsets: ["latin"], weight: ["300", "400", "500"], style: ["normal", "italic"] });
+// The About page's display serif only; the rest of the site stays in Geist. Self-hosted (Latin, light
+// only, SIL OFL): next/font/google under Turbopack fails the Vercel build when Google answers with
+// `&`-bearing font URLs (vercel/next.js#99114). Every serif use on this page is font-light.
+const serif = localFont({
+  src: [
+    { path: "./fonts/cormorant-garamond-300.woff2", weight: "300", style: "normal" },
+    { path: "./fonts/cormorant-garamond-300-italic.woff2", weight: "300", style: "italic" },
+  ],
+});
 
 // Photos the site already uses (images.unsplash.com is the only host next.config.ts allows).
 const photo = (id: string) => `https://images.unsplash.com/photo-${id}?ar=4:5&fit=crop&w=1600&q=80`;
