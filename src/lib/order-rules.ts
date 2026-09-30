@@ -37,17 +37,27 @@ export function nextStatus(current: OrderStatus, event: CheckoutEvent, paymentSt
   }
 }
 
+// A delayed payment that failed sends its PaymentIntent back to requires_payment_method (or canceled);
+// the Checkout Session itself just stays complete + unpaid, so this is the only fetched sign of it.
+const FAILED_INTENT = ["requires_payment_method", "canceled"];
+
 /**
  * The event a Checkout Session fetched from Stripe's API is equivalent to, so the success page can apply
  * the same verified fact when the webhook is late or never arrives. `async_payment_succeeded` covers a
- * paid session from both pending and processing. A failed delayed payment is only known from its
- * webhook (the session just stays "unpaid"), so that case is never inferred here.
+ * paid session from both pending and processing. A completed, unpaid session whose PaymentIntent has
+ * failed (fetch the session with `expand: ["payment_intent"]`) maps to `async_payment_failed`, so a
+ * missed failure webhook can't leave the order "processing" and block checkout forever.
  */
-export function sessionEvent(sessionStatus: string | null, paymentStatus: PaymentStatus): CheckoutEvent | null {
+export function sessionEvent(sessionStatus: string | null, paymentStatus: PaymentStatus, intentStatus?: string | null): CheckoutEvent | null {
   if (sessionStatus === "expired") return "checkout.session.expired";
   if (sessionStatus !== "complete") return null;
-  return isPaid(paymentStatus) ? "checkout.session.async_payment_succeeded" : "checkout.session.completed";
+  if (isPaid(paymentStatus)) return "checkout.session.async_payment_succeeded";
+  return intentStatus && FAILED_INTENT.includes(intentStatus) ? "checkout.session.async_payment_failed" : "checkout.session.completed";
 }
+
+/** The PaymentIntent status of a session fetched with `expand: ["payment_intent"]` (null if not expanded). */
+export const intentStatus = (session: { payment_intent: string | { status: string } | null }) =>
+  typeof session.payment_intent === "object" && session.payment_intent ? session.payment_intent.status : null;
 
 /** The short reference customers see (and quote to client services). */
 export const orderReference = (id: string) => `MSN-${id.slice(0, 8).toUpperCase()}`;

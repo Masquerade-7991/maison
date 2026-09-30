@@ -8,7 +8,7 @@ import { OrderDelivery, OrderTotals } from "@/components/order-details";
 import { emailIsOff } from "@/lib/email";
 import { formatCents } from "@/lib/format";
 import { applyCheckoutSession, getOrderForUser } from "@/lib/orders";
-import { orderReference, orderStatusCopy, sessionEvent } from "@/lib/order-rules";
+import { intentStatus, orderReference, orderStatusCopy, sessionEvent } from "@/lib/order-rules";
 import { requireUser } from "@/lib/session";
 import { stripe } from "@/lib/stripe";
 
@@ -25,7 +25,7 @@ export default async function CheckoutSuccessPage({ searchParams }: PageProps<"/
 
   let session: Stripe.Checkout.Session;
   try {
-    session = await stripe().checkout.sessions.retrieve(sessionId);
+    session = await stripe().checkout.sessions.retrieve(sessionId, { expand: ["payment_intent"] });
   } catch (e) {
     // Only an unknown session is "not found"; a Stripe outage goes to the error boundary's "Try again",
     // so a customer who has just paid is never told their order doesn't exist.
@@ -41,7 +41,7 @@ export default async function CheckoutSuccessPage({ searchParams }: PageProps<"/
   // Webhook late or never delivered: apply the session as Stripe's API reports it (fetched above with
   // our secret key, never from the URL or the browser). Same idempotent transition as the webhook, so
   // whichever arrives second changes nothing.
-  const event = order.status === "pending" || order.status === "processing" ? sessionEvent(session.status, session.payment_status) : null;
+  const event = order.status === "pending" || order.status === "processing" ? sessionEvent(session.status, session.payment_status, intentStatus(session)) : null;
   if (event) {
     await applyCheckoutSession(session, event);
     order = (await getOrderForUser(orderId, user.id))!;

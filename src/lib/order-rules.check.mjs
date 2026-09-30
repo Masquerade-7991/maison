@@ -1,6 +1,6 @@
 // node src/lib/order-rules.check.mjs
 import assert from "node:assert/strict";
-import { CHECKOUT_EVENTS, nextFulfilment, nextStatus, refundLabel, sessionEvent } from "./order-rules.ts";
+import { CHECKOUT_EVENTS, intentStatus, nextFulfilment, nextStatus, refundLabel, sessionEvent } from "./order-rules.ts";
 
 const C = "checkout.session.completed";
 const OK = "checkout.session.async_payment_succeeded";
@@ -41,6 +41,20 @@ assert.equal(via("pending", "expired", "unpaid"), "expired");
 assert.equal(via("pending", "open", "unpaid"), null, "customer hasn't paid: nothing inferred");
 assert.equal(via("pending", "complete", "something_new"), null, "unknown payment_status is never paid");
 for (const s of ["paid", "payment_failed", "expired"]) assert.equal(via(s, "complete", "paid"), null, `${s} never moves`);
+
+// A failed delayed payment is read from the expanded PaymentIntent, so a missed failure webhook can't
+// leave the order "processing" (which blocks every later checkout).
+const viaIntent = (order, p, pi) => { const e = sessionEvent("complete", p, pi); return e && nextStatus(order, e, p); };
+assert.equal(viaIntent("processing", "unpaid", "requires_payment_method"), "payment_failed", "delayed payment failed");
+assert.equal(viaIntent("processing", "unpaid", "canceled"), "payment_failed");
+assert.equal(viaIntent("pending", "unpaid", "requires_payment_method"), "payment_failed");
+assert.equal(viaIntent("processing", "unpaid", "processing"), null, "still clearing: no change");
+assert.equal(viaIntent("pending", "unpaid", "processing"), "processing");
+assert.equal(viaIntent("processing", "unpaid", null), null, "intent not expanded: nothing inferred");
+assert.equal(viaIntent("processing", "paid", "requires_payment_method"), "paid", "a paid session is never read as failed");
+assert.equal(intentStatus({ payment_intent: { status: "canceled" } }), "canceled");
+assert.equal(intentStatus({ payment_intent: "pi_123" }), null);
+assert.equal(intentStatus({ payment_intent: null }), null);
 
 // Fulfilment: admin-driven, paid orders only, forward only.
 const T = { carrier: "UPS", trackingNumber: "1Z999" };

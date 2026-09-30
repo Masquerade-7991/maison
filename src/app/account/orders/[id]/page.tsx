@@ -5,7 +5,7 @@ import { OrderDetails } from "@/components/order-details";
 import { emailIsOff } from "@/lib/email";
 import { formatCents } from "@/lib/format";
 import { applyCheckoutSession, getOrderForUser } from "@/lib/orders";
-import { fulfilmentStatusCopy, orderReference, orderStatusCopy, orderStatusTone, refundLabel, sessionEvent } from "@/lib/order-rules";
+import { fulfilmentStatusCopy, intentStatus, orderReference, orderStatusCopy, orderStatusTone, refundLabel, sessionEvent } from "@/lib/order-rules";
 import { requireUser } from "@/lib/session";
 import { stripe } from "@/lib/stripe";
 
@@ -32,8 +32,8 @@ export default async function OrderPage({ params }: PageProps<"/account/orders/[
   // what it reports through the same idempotent transition. Stripe unreachable = show what we have.
   if ((order.status === "pending" || order.status === "processing") && order.stripeCheckoutSessionId) {
     try {
-      const session = await stripe().checkout.sessions.retrieve(order.stripeCheckoutSessionId);
-      const event = sessionEvent(session.status, session.payment_status);
+      const session = await stripe().checkout.sessions.retrieve(order.stripeCheckoutSessionId, { expand: ["payment_intent"] });
+      const event = sessionEvent(session.status, session.payment_status, intentStatus(session));
       if (event && (await applyCheckoutSession(session, event))?.changed) order = (await getOrderForUser(id, user.id))!;
     } catch (e) {
       console.error("[order page] could not check Stripe for", order.id, e);

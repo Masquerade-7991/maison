@@ -7,7 +7,7 @@ import { redirect } from "next/navigation";
 import Stripe from "stripe";
 import { getBag } from "@/lib/cart";
 import { applyCheckoutSession, attachSession, createPendingOrder, expireIfPending, unsettledOrdersFor } from "@/lib/orders";
-import { sessionEvent } from "@/lib/order-rules";
+import { intentStatus, sessionEvent } from "@/lib/order-rules";
 import { getSession } from "@/lib/session";
 import { stripe } from "@/lib/stripe";
 
@@ -53,11 +53,11 @@ export async function startCheckoutAction(): Promise<CheckoutState> {
       continue;
     }
     try {
-      const old = await client.checkout.sessions.retrieve(o.sessionId);
+      const old = await client.checkout.sessions.retrieve(o.sessionId, { expand: ["payment_intent"] });
       if (old.status === "open") await client.checkout.sessions.expire(o.sessionId);
       if (old.status !== "complete") await expireIfPending(o.id);
       else {
-        const ev = sessionEvent(old.status, old.payment_status);
+        const ev = sessionEvent(old.status, old.payment_status, intentStatus(old));
         const r = ev ? await applyCheckoutSession(old, ev) : null;
         if (r?.status === "paid") settled = true; // by this call or a concurrent webhook: the bag read above is stale
         else if ((r?.status ?? o.status) === "processing") confirming = true;
