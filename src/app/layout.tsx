@@ -99,8 +99,12 @@ function Footer() {
             <h2 className="label">{col.title}</h2>
             <ul className="mt-5 space-y-3">
               {col.links.map((l) => (
-                <li key={l}>
-                  <a href="#" className="link-nav text-muted hover:text-ink">{l}</a>
+                <li key={l.label}>
+                  {l.href ? (
+                    <Link href={l.href} className="link-nav text-muted hover:text-ink">{l.label}</Link>
+                  ) : (
+                    <a href="#" className="link-nav text-muted hover:text-ink">{l.label}</a>
+                  )}
                 </li>
               ))}
             </ul>

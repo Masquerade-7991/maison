@@ -22,14 +22,14 @@ npm run auth:set-role -- <email> <customer|admin>
 
 pnpm only: `pnpm add`, never `npm install` (`packageManager` pins pnpm). pnpm refuses to run anything unless `allowBuilds` in `pnpm-workspace.yaml` holds real `true`/`false` values. `npm run <script>` still works.
 
-Env lives in `.env` (from `.env.example`). You can't read or write `.env` (permissions), so the user pastes secrets. `BETTER_AUTH_URL` must be the app's exact origin or verification links break. Stripe needs a restricted `rk_` key with *Checkout Sessions: write*; locally the webhook secret comes from `stripe listen --events checkout.session.completed,checkout.session.async_payment_succeeded,checkout.session.async_payment_failed,checkout.session.expired,charge.refunded --forward-to localhost:3000/api/stripe/webhook` (current CLIs refuse to start without `--events`; the secret is stable per machine, see `stripe listen --print-secret`). The storefront builds and runs without Stripe or Resend keys; only checkout, the webhook and email need them.
+Env lives in `.env` (from `.env.example`). You can't read or write `.env` (permissions), so the user pastes secrets. `BETTER_AUTH_URL` must be the app's exact origin or verification links break. Stripe needs a restricted `rk_` key with *Checkout Sessions: write*; locally the webhook secret comes from `stripe listen --events checkout.session.completed,checkout.session.async_payment_succeeded,checkout.session.async_payment_failed,checkout.session.expired,charge.refunded --forward-to localhost:3000/api/stripe/webhook` (current CLIs refuse to start without `--events`; the secret is stable per machine, see `stripe listen --print-secret`). The storefront builds and runs without Stripe or Resend keys; only checkout, the webhook and email need them. `CONTACT_TO` is the business inbox the contact form mails (optional; unset means the server log).
 
 ## Verification
 
 There is no test runner.
 
 - `npm run check`: the pure rules, run by Node 23+ (which strips TS types). That's why pure modules import each other as `./x.ts` and `tsconfig.json` sets `allowImportingTsExtensions`.
-- `npm run check:payment` and `npm run e2e:checkout | e2e:customer-flow | e2e:password-reset | e2e:admin-stock | e2e:admin-flow` work on the shared production database and clean up after themselves. Test accounts are always `qa.…@example.com` and test products `qa-…`.
+- `npm run check:payment` and `npm run e2e:checkout | e2e:customer-flow | e2e:password-reset | e2e:contact | e2e:admin-stock | e2e:admin-flow` work on the shared production database and clean up after themselves. Test accounts are always `qa.…@example.com` and test products `qa-…`.
 - The e2e runs drive an installed Edge through `playwright-core` (`BROWSER_CHANNEL=chrome` for Chrome) against `npm run build` then `EMAIL_LINKS_ON_PAGE=true BETTER_AUTH_URL=http://localhost:3100 npx next start -p 3100`. Set `BASE=<url>` to target another server, such as the live site. Production mode allows 3 sign ups a minute, so leave a minute between runs. `e2e:customer-flow` needs `chain-shoulder-bag` to have 2 to 9 in stock.
 - After an interrupted run: `npx tsx scripts/e2e/db.mts cleanup:stale` lists leftover test accounts, and `cleanup <email…>` removes them and puts their paid stock back.
 
@@ -58,6 +58,12 @@ Next.js 16 App Router, React 19, Tailwind v4 (PostCSS plugin only, no `tailwind.
 - Categories are product types; department (`women`/`men`/`unisex`) is an enum and `isGift` a flag.
 - Admin image URLs must be on `images.unsplash.com`, the only host `next.config.ts` allows.
 - "Notify me when it is available" on sold out product pages is a placeholder: it stores and sends nothing, and says so. Real alerts would need a table and an email when stock goes up from 0.
+
+### Contact and About
+
+- `/contact` opens the contact form in a native `<dialog>`. `sendContactAction` (`src/lib/contact-actions.ts`) is a public Server Action: `parseContactForm` (`contact-rules.ts`) validates every field, a hidden `website` trap field is thanked but never sent, and **nothing is stored**. It mails `CONTACT_TO` through `sendEmail`; without `CONTACT_TO`, or while email is off, the message goes to the server log. The form has no rate limiting yet (add it if spam appears).
+- React 19 resets a form after its action and restores inputs from `defaultValue`, but not a `<select>`: key a select on each server reply (as the contact topic does) or it silently falls back to its first option.
+- `/about` is a static editorial page with an invented brand story. It alone uses a serif (Cormorant Garamond via `next/font/google`, headings only); everywhere else stays in Geist. The `reveal` utility in `globals.css` fades blocks in with scroll driven CSS and does nothing under reduced motion.
 
 ### Caching
 

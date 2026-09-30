@@ -406,6 +406,24 @@
   border-top: 1px solid var(--line);
 }
 
+/* Editorial fade-in as a block scrolls into view (About page). CSS only: browsers without
+   scroll-driven animations, and visitors who prefer reduced motion, simply see it in place. */
+@keyframes reveal {
+  from {
+    opacity: 0;
+    translate: 0 1.5rem;
+  }
+}
+@utility reveal {
+  @supports (animation-timeline: view()) {
+    @media (prefers-reduced-motion: no-preference) {
+      animation: reveal linear both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 25%;
+    }
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

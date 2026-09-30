@@ -10,10 +10,11 @@ export const nav = [
   { label: "Stories", href: "/stories" },
 ];
 
-export const footer = [
-  { title: "Client services", links: ["Contact us", "Shipping", "Returns", "FAQ"] },
-  { title: "The house", links: ["About", "Sustainability", "Careers", "Stores"] },
-  { title: "Legal", links: ["Privacy", "Terms", "Cookies", "Accessibility"] },
+// ponytail: only Contact us and About exist; the rest stay "#" placeholders until their pages do.
+export const footer: { title: string; links: { label: string; href?: string }[] }[] = [
+  { title: "Client services", links: [{ label: "Contact us", href: "/contact" }, { label: "Shipping" }, { label: "Returns" }, { label: "FAQ" }] },
+  { title: "The house", links: [{ label: "About", href: "/about" }, { label: "Sustainability" }, { label: "Careers" }, { label: "Stores" }] },
+  { title: "Legal", links: [{ label: "Privacy" }, { label: "Terms" }, { label: "Cookies" }, { label: "Accessibility" }] },
 ];
 
 export const hero = {
