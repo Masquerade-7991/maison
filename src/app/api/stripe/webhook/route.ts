@@ -11,8 +11,10 @@ export async function POST(req: Request) {
   if (!signature) return new Response("Missing Stripe signature", { status: 400 });
 
   let secret: string;
+  let client: Stripe;
   try {
     secret = webhookSecret();
+    client = stripe(); // a missing STRIPE_SECRET_KEY is misconfiguration too, not a bad signature
   } catch (e) {
     // Our misconfiguration, not a bad request: 500 so Stripe keeps retrying once the secret is set.
     console.error("[stripe webhook]", e instanceof Error ? e.message : e);
@@ -22,7 +24,7 @@ export async function POST(req: Request) {
   let event: Stripe.Event;
   try {
     // Raw body: the signature is over the exact bytes Stripe sent.
-    event = stripe().webhooks.constructEvent(await req.text(), signature, secret);
+    event = client.webhooks.constructEvent(await req.text(), signature, secret);
   } catch (e) {
     console.error("[stripe webhook] rejected:", e instanceof Error ? e.message : e);
     return new Response("Invalid signature", { status: 400 });

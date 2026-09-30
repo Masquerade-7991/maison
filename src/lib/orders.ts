@@ -57,7 +57,11 @@ const idOf = (v: string | { id: string } | null | undefined) => (typeof v === "s
  * `status = <current>`, so only the call that actually moves the order decrements stock and
  * clears the bag. Returns the order's status afterwards.
  */
-export async function applyCheckoutSession(session: Stripe.Checkout.Session, event: CheckoutEvent) {
+export async function applyCheckoutSession(
+  session: Stripe.Checkout.Session,
+  event: CheckoutEvent,
+  retried = false,
+): Promise<{ orderId: string; status: OrderStatus; changed: boolean } | null> {
   const orderId = session.metadata?.order_id;
   if (!orderId) return null;
   const [order] = await db
@@ -72,25 +76,19 @@ export async function applyCheckoutSession(session: Stripe.Checkout.Session, eve
 
   const paid = next === "paid";
   const shipping = session.collected_information?.shipping_details ?? null;
-  // Shortfall is read from the decrement itself, not the statement snapshot: in READ COMMITTED an UPDATE
-  // re-checks its WHERE against the locked, current row, so two concurrent last-unit payments can't
-  // both pass `stock >= q` in `dec`. The loser falls to `short` (floored at 0; its rows are disjoint
-  // from dec's, so no row is updated twice). Made-to-order stock decrements too but is never short.
-  const result = await db.execute<{ changed: number; short: number }>(sql`
-    with t as (
-      update orders set
-        status = ${next}::order_status,
-        updated_at = now(),
-        paid_at = case when ${paid} then now() else paid_at end,
-        amount_total_cents = coalesce(${session.amount_total}, amount_total_cents),
-        stripe_payment_intent_id = coalesce(${idOf(session.payment_intent)}, stripe_payment_intent_id),
-        customer_email = coalesce(${session.customer_details?.email ?? null}, customer_email),
-        shipping_name = coalesce(${shipping?.name ?? null}, shipping_name),
-        shipping_address = coalesce(${shipping ? JSON.stringify(shipping.address) : null}::jsonb, shipping_address)
-      where id = ${orderId} and status = ${order.status}::order_status
-      returning id, user_id
+  // Everything, including the shortfall flag, is ONE statement, so nothing can fail between the order
+  // becoming paid and its side effects (a Stripe retry would find it paid and do nothing).
+  // `g` locks the order row first: a concurrent call for the same order waits, then re-checks
+  // `status = current` against the committed row (READ COMMITTED) and matches nothing, so only one call
+  // decrements. Shortfall is read from the decrement itself, not the snapshot: an UPDATE re-checks
+  // `stock >= q` against the current row, so of two last-unit payments for different orders the loser
+  // falls to `short` (floored at 0; disjoint from dec's rows, so no row is updated twice). Made-to-order
+  // stock decrements too but is never short. `t` reads `short`, so it runs after the decrement.
+  const result = await db.execute<{ changed: number }>(sql`
+    with g as (
+      select id from orders where id = ${orderId} and status = ${order.status}::order_status for update
     ),
-    lines as (select product_id, sum(quantity)::int as q from order_items where ${paid} and order_id in (select id from t) group by product_id),
+    lines as (select product_id, sum(quantity)::int as q from order_items where ${paid} and order_id in (select id from g) group by product_id),
     dec as (
       update products p set stock_quantity = p.stock_quantity - l.q, updated_at = now()
       from lines l where p.id = l.product_id and p.stock_quantity >= l.q
@@ -101,23 +99,40 @@ export async function applyCheckoutSession(session: Stripe.Checkout.Session, eve
       from lines l where p.id = l.product_id and p.id not in (select id from dec)
       returning p.made_to_order
     ),
+    t as (
+      update orders set
+        status = ${next}::order_status,
+        updated_at = now(),
+        paid_at = case when ${paid} then now() else paid_at end,
+        amount_total_cents = coalesce(${session.amount_total}, amount_total_cents),
+        stripe_payment_intent_id = coalesce(${idOf(session.payment_intent)}, stripe_payment_intent_id),
+        customer_email = coalesce(${session.customer_details?.email ?? null}, customer_email),
+        shipping_name = coalesce(${shipping?.name ?? null}, shipping_name),
+        shipping_address = coalesce(${shipping ? JSON.stringify(shipping.address) : null}::jsonb, shipping_address),
+        stock_shortfall = stock_shortfall or exists (select 1 from short where not made_to_order)
+      where id in (select id from g)
+      returning id, user_id
+    ),
     bag as (
       delete from cart_items c using order_items oi, t
       where ${paid} and oi.order_id = t.id and c.user_id = t.user_id and c.product_id = oi.product_id and c.size = oi.size
       returning 1
     )
-    select (select count(*) from t)::int as changed, (select count(*) from short where not made_to_order)::int as short
+    select (select count(*) from t)::int as changed
   `);
   const changed = (result.rows[0]?.changed ?? 0) > 0;
-  // Lost the race to a concurrent call: report whatever the winner wrote.
+  // Lost the race to a concurrent call. If the winner moved the order to a status this event can still
+  // advance (e.g. it went pending → processing while this payment-succeeded event read "pending"), apply
+  // it again once from there: a webhook answered 200 here is never redelivered, so it would be lost.
   if (!changed) {
     const [now] = await db.select({ status: orders.status }).from(orders).where(eq(orders.id, orderId));
+    if (!retried && now.status !== order.status && nextStatus(now.status as OrderStatus, event, session.payment_status)) {
+      return applyCheckoutSession(session, event, true);
+    }
     return refreshStock({ orderId, status: now.status as OrderStatus, changed: false });
   }
-  // A second statement because `t` already wrote this order row, and a statement can't update a row
-  // twice. Only this call moved the order, and the flag only ever goes to true, so it is safe to repeat.
-  if ((result.rows[0]?.short ?? 0) > 0) await db.update(orders).set({ stockShortfall: true }).where(eq(orders.id, orderId));
-  // Only the call whose guarded UPDATE moved the order gets here, so the confirmation goes exactly once.
+  // Only the call whose guarded UPDATE moved the order gets here, so the confirmation goes at most once
+  // (notifyCustomer never throws; a process killed right here would lose it, the order is still correct).
   if (paid) await notifyCustomer(orderId, "confirmed");
   return refreshStock({ orderId, status: next, changed: true });
 }

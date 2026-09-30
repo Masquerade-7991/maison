@@ -4,6 +4,7 @@
 // fresh read of the signed-in user's bag, and Stripe only ever receives amounts from our database.
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import Stripe from "stripe";
 import { getBag } from "@/lib/cart";
 import { applyCheckoutSession, attachSession, createPendingOrder, expireIfPending, unsettledOrdersFor } from "@/lib/orders";
 import { sessionEvent } from "@/lib/order-rules";
@@ -45,6 +46,7 @@ export async function startCheckoutAction(): Promise<CheckoutState> {
   // unpaid (processing) order keeps its pieces in the bag, so it blocks checkout until it settles.
   let settled = false;
   let confirming = false;
+  let unchecked = false;
   for (const o of await unsettledOrdersFor(user.id)) {
     if (!o.sessionId) {
       await expireIfPending(o.id);
@@ -61,8 +63,17 @@ export async function startCheckoutAction(): Promise<CheckoutState> {
         else if ((r?.status ?? o.status) === "processing") confirming = true;
       }
     } catch (e) {
+      // Fail closed: an older session we couldn't check or close may still be payable (e.g. the customer
+      // paid it in another tab between our retrieve and expire, so Stripe refused the expire), and
+      // starting a new one would charge the same pieces twice. The next attempt re-checks it. Only a
+      // session Stripe says doesn't exist can never be paid, so that order is expired instead.
+      if (e instanceof Stripe.errors.StripeInvalidRequestError && e.code === "resource_missing") {
+        await expireIfPending(o.id);
+        continue;
+      }
       console.error("[checkout] could not close older session", o.sessionId, e);
       if (o.status === "processing") confirming = true;
+      else unchecked = true;
     }
   }
   if (settled) {
@@ -71,6 +82,9 @@ export async function startCheckoutAction(): Promise<CheckoutState> {
   }
   if (confirming) {
     return { error: "An earlier payment is still being confirmed, so its pieces remain in your bag. Please check your orders before checking out again." };
+  }
+  if (unchecked) {
+    return { error: "We couldn't confirm the status of an earlier checkout, so nothing new was started. Please try again in a moment." };
   }
 
   const { orderId, items } = await createPendingOrder(user.id, bag);
