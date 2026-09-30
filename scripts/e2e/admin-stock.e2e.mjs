@@ -98,6 +98,18 @@ try {
   assert.ok(await customerPage.getByRole("button", { name: "Sold out" }).isDisabled());
   pass("storefront product page shows a disabled 'Sold out' button");
 
+  // The "Notify me" placeholder: shown only when sold out, answers honestly, sends nothing.
+  const posts = [];
+  const onRequest = (r) => r.method() !== "GET" && posts.push(r.url());
+  customerPage.on("request", onRequest);
+  await customerPage.getByRole("button", { name: "Notify me when it is available" }).click();
+  await customerPage.getByText("Back in stock alerts aren't switched on yet").waitFor();
+  await customerPage.waitForTimeout(500);
+  customerPage.off("request", onRequest);
+  assert.deepEqual(posts, [], "the placeholder sends no request");
+  assert.ok(await customerPage.getByRole("button", { name: "Sold out" }).isDisabled(), "still sold out");
+  pass("sold out: 'Notify me when it is available' shows the placeholder note and sends nothing");
+
   // 5. Bag reflects live stock; checkout blocked, then allowed again
   await customerPage.goto(`${BASE}/bag`);
   const checkout = customerPage.getByRole("button", { name: /checkout/i });
@@ -107,7 +119,10 @@ try {
   assert.equal(await save(adminPage, 5), "Saved.");
   await customerPage.reload();
   assert.ok(await checkout.isEnabled(), "checkout allowed again");
-  pass("stock back to 5 → checkout allowed again");
+  await customerPage.goto(`${BASE}/products/${SLUG}`);
+  assert.equal(await customerPage.getByRole("button", { name: "Notify me when it is available" }).count(), 0, "no Notify me when buyable");
+  await customerPage.goto(`${BASE}/bag`);
+  pass("stock back to 5 → checkout allowed again, and 'Notify me' is gone from the product page");
 
   // 6. Access: customer gets a 404 page, and a replayed action changes nothing
   const res = await customerPage.goto(`${BASE}/admin/stock`);

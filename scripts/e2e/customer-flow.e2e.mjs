@@ -11,6 +11,9 @@ const SIZED = "satin-bomber-jacket"; // ready-to-wear: needs a size
 const email = testEmail("customer.flow");
 const OTHER = testEmail("customer.other");
 const json = (s) => JSON.parse(s);
+/** Waits until the header's Bag link reads "Bag" (n = 0) or "Bag (n)". It is fetched after load, so it may lag a moment. */
+const headerBag = (page, n) =>
+  page.waitForFunction((want) => document.querySelector('header a[href="/bag"]')?.textContent?.replace(/\s+/g, "") === want, n ? `Bag(${n})` : "Bag", { timeout: 15000 });
 const money = (cents) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: cents % 100 === 0 ? 0 : 2 }).format(cents / 100);
 
@@ -60,11 +63,14 @@ try {
   pass(`viewed ${product.name}: ${money(product.priceCents)}, stock shown, one size`);
 
   // ── Add to bag ───────────────────────────────────────────────────────────────────────────────────
+  await headerBag(page, 0);
   await page.getByRole("button", { name: "Add to bag" }).click();
   await page.getByText("Added to your bag.").waitFor();
+  await headerBag(page, 1); // same static page, updated by the bag:changed event
+  assert.equal(await page.locator('header a[href="/bag"]').getAttribute("aria-label"), "Bag, 1 item");
   await page.goto(`${BASE}/bag`);
   assert.match(await bagText(page), new RegExp(`Your bag \\(1\\).*${product.name}`, "i"));
-  pass("added to bag; the bag shows 1 piece");
+  pass("added to bag; the header goes from 'Bag' to 'Bag (1)' on the same page; the bag shows 1 piece");
 
   // Missing size on a sized product is refused by the server (the browser's `required` removed first).
   await page.goto(`${BASE}/products/${SIZED}`);
@@ -86,6 +92,7 @@ try {
   for (let q = 2; q <= STOCK; q++) {
     await inc().click();
     await settle(q);
+    await headerBag(page, q);
   }
   assert.equal(await qty(), String(STOCK));
   assert.ok(await inc().isDisabled(), "+ is disabled at the stock limit");
@@ -93,8 +100,12 @@ try {
   await dec().click();
   await settle(STOCK - 1);
   const QTY = STOCK - 1;
+  await headerBag(page, QTY);
   assert.ok((await bagText(page)).includes(money(product.priceCents * QTY)));
-  pass(`quantity 1 → ${STOCK} with +, + disabled at the stock limit, back to ${QTY} with −; subtotal ${money(product.priceCents * QTY)}`);
+  await page.goto(`${BASE}/products/${SLUG}`); // a static (cached) page: the count arrives after load
+  await headerBag(page, QTY);
+  await page.goto(`${BASE}/bag`);
+  pass(`quantity 1 → ${STOCK} with +, + disabled at the stock limit, back to ${QTY} with −; subtotal ${money(product.priceCents * QTY)}; the header follows (and shows 'Bag (${QTY})' on a cached product page)`);
 
   // ── Invalid quantities (the + button's value edited in the page, then submitted) ─────────────────
   const tamper = async (value) => {
@@ -116,6 +127,7 @@ try {
   }
   assert.equal(await tamper(String(STOCK + 1)), `Only ${STOCK} available for this line.`);
   assert.equal(await qty(), String(QTY));
+  await headerBag(page, QTY);
   pass(`invalid quantities 0, 11, 1.5, abc, -2 and ${STOCK + 1} (over stock) are refused by the server; quantity stays ${QTY}`);
 
   // ── Checkout and payment ─────────────────────────────────────────────────────────────────────────
@@ -131,9 +143,10 @@ try {
   assert.equal(orders.length, 1);
   assert.equal(orders[0].status, "paid");
   assert.equal(json(db("product:get", SLUG)).stock, STOCK - QTY, "stock went down by the quantity bought");
+  await headerBag(page, 0); // on the success page
   await page.goto(`${BASE}/bag`);
   assert.doesNotMatch(await bagText(page), new RegExp(product.name), "the paid pieces left the bag");
-  pass(`order paid in the database, stock ${STOCK} → ${STOCK - QTY}, bag emptied`);
+  pass(`order paid in the database, stock ${STOCK} → ${STOCK - QTY}, bag emptied, header back to 'Bag'`);
 
   // ── The order in the account ─────────────────────────────────────────────────────────────────────
   await page.goto(`${BASE}/account/orders`);

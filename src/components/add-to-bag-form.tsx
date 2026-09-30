@@ -1,13 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { addToBagAction } from "@/lib/cart-actions";
+import { announceBagChange } from "@/lib/cart-rules";
 
 // Posts only the slug and the chosen size; price and stock are read on the server.
 // The product page stays static: the session is only read when the action runs.
 export function AddToBagForm({ slug, sizes, buyable }: { slug: string; sizes: string[]; buyable: boolean }) {
   const [state, action, pending] = useActionState(addToBagAction, null);
+  const [notifyAsked, setNotifyAsked] = useState(false);
+  useEffect(() => {
+    if (state?.ok) announceBagChange(); // the header's "Bag (n)"
+  }, [state]);
 
   return (
     <form action={action} className="mt-6">
@@ -35,6 +40,19 @@ export function AddToBagForm({ slug, sizes, buyable }: { slug: string; sizes: st
         {pending && <span aria-hidden className="size-3.5 animate-spin rounded-full border border-current border-t-transparent" />}
         {!buyable ? "Sold out" : pending ? "Adding…" : "Add to bag"}
       </button>
+
+      {/* ponytail: placeholder only, nothing is stored or sent. Real alerts need a stock_alerts table
+          (user, product) and an email when a product's stock goes up from 0. */}
+      {!buyable &&
+        (notifyAsked ? (
+          <p role="status" className="mt-4 border-l-2 border-line pl-4 text-muted">
+            Thanks for your interest. Back in stock alerts aren&apos;t switched on yet, so we won&apos;t email you about this piece.
+          </p>
+        ) : (
+          <button type="button" onClick={() => setNotifyAsked(true)} className="btn btn-secondary mt-3 sm:w-full">
+            Notify me when it is available
+          </button>
+        ))}
 
       <div aria-live="polite" className="min-h-6">
         {state && (

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Geist, Geist_Mono } from "next/font/google";
+import { BagLink } from "@/components/bag-link";
 import { ThemeToggle, themeScript } from "@/components/theme-toggle";
 import { footer, nav } from "@/lib/sample-data";
 import "./globals.css";
@@ -75,7 +76,7 @@ function Header() {
             <Link href="/account" className="label link-nav">Account</Link>
           </li>
           <li>
-            <Link href="/bag" className="label link-nav">Bag</Link>
+            <BagLink />
           </li>
         </ul>
       </div>

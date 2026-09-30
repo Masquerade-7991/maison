@@ -2,6 +2,10 @@
 // src/lib/cart.ts is the only module that reads or writes cart_items.
 import type { StockState } from "@/lib/stock";
 
+/** Fired in the browser after anything changes the bag, so the header's count (BagLink) fetches again. */
+export const BAG_CHANGED = "bag:changed";
+export const announceBagChange = () => window.dispatchEvent(new Event(BAG_CHANGED));
+
 export const MAX_PER_PRODUCT = 10; // also enforced by cart_items_quantity_range in src/db/schema.ts
 
 export type StockInfo = { stockQuantity: number; madeToOrder: boolean };

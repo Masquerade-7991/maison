@@ -68,6 +68,15 @@ export async function getBag(userId: string): Promise<Bag> {
   };
 }
 
+/** How many pieces this user's bag holds (the header's "Bag (n)"). */
+export async function bagCount(userId: string) {
+  const [row] = await db
+    .select({ n: sql<number>`coalesce(sum(${cartItems.quantity}), 0)::int` })
+    .from(cartItems)
+    .where(eq(cartItems.userId, userId));
+  return row?.n ?? 0;
+}
+
 /** Live stock and category for a product the browser named by slug. */
 export async function findProductForBag(slug: string) {
   const [row] = await db

@@ -14,6 +14,7 @@ export default async function SignInPage({ searchParams }: PageProps<"/sign-in">
   // Also where a verification link lands: autoSignInAfterVerification has just signed them in.
   if (await getSession()) redirect(next);
   const linkFailed = first(sp.error) !== undefined;
+  const passwordReset = first(sp.reset) === "1";
 
   return (
     <section className="container-page py-12 md:py-20">
@@ -29,7 +30,15 @@ export default async function SignInPage({ searchParams }: PageProps<"/sign-in">
               That verification link has expired or was already used. Sign in and we&apos;ll send you a new one.
             </p>
           )}
+          {passwordReset && (
+            <p role="status" className="mb-8 border-l-2 border-ink pl-4">
+              Your password has changed. Sign in with the new one.
+            </p>
+          )}
           <AuthForm mode="sign-in" next={next} />
+          <p className="mt-6 text-center">
+            <Link href="/forgot-password" className="link text-muted hover:text-ink">Forgot your password?</Link>
+          </p>
         </div>
         <p className="mt-8 text-center text-muted">
           New to Maison?{" "}

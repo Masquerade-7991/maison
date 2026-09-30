@@ -1,9 +1,9 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef } from "react";
 import { useFormStatus } from "react-dom";
 import { removeFromBagAction, updateQuantityAction } from "@/lib/cart-actions";
-import type { BagIssue } from "@/lib/cart-rules";
+import { announceBagChange, type BagIssue } from "@/lib/cart-rules";
 
 type Props = { slug: string; size: string; quantity: number; max: number; name: string; issue: BagIssue };
 
@@ -11,6 +11,9 @@ type Props = { slug: string; size: string; quantity: number; max: number; name: 
 // the server re-checks stock either way, `max` only decides which buttons are offered.
 export function BagLineControls({ slug, size, quantity, max, name, issue }: Props) {
   const [state, action, pending] = useActionState(updateQuantityAction, null);
+  useEffect(() => {
+    if (state?.ok) announceBagChange(); // the header's "Bag (n)"
+  }, [state]);
   const label = `${name}${size ? `, size ${size}` : ""}`;
 
   return (
@@ -73,6 +76,12 @@ function StepButton({ value, disabled, label, children }: { value: number; disab
 
 function RemoveButton({ label, emphasise }: { label: string; emphasise: boolean }) {
   const { pending } = useFormStatus();
+  // The remove action returns nothing, so announce the change when its submission finishes.
+  const was = useRef(false);
+  useEffect(() => {
+    if (was.current && !pending) announceBagChange();
+    was.current = pending;
+  }, [pending]);
   return (
     <button
       type="submit"

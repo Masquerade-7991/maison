@@ -2,9 +2,9 @@
 // same database as the app (the shared Neon `production` branch), so every command either reads or undoes
 // what a test did. Only touches accounts whose email starts with `qa.`.
 import "dotenv/config";
-import { and, eq, inArray, like, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, like, sql } from "drizzle-orm";
 const { db } = await import("../../src/db");
-const { orderItems, orders, products, user } = await import("../../src/db/schema");
+const { orderItems, orders, products, user, verification } = await import("../../src/db/schema");
 const { stripe } = await import("../../src/lib/stripe");
 
 const [cmd, ...args] = process.argv.slice(2);
@@ -56,6 +56,7 @@ switch (cmd) {
         }
       }
       if (list.length) await db.delete(orders).where(inArray(orders.id, list.map((o) => o.id)));
+      await db.delete(verification).where(eq(verification.value, u.id)); // unused reset tokens
       await db.delete(user).where(eq(user.id, u.id));
       console.log(`${email}: ${list.length} orders removed, account deleted`);
     }
@@ -87,6 +88,17 @@ switch (cmd) {
   case "order:get": {
     const [o] = await db.select({ status: orders.status, fulfilment: orders.fulfilmentStatus, carrier: orders.carrier }).from(orders).where(eq(orders.id, args[0]));
     console.log(JSON.stringify(o ?? null));
+    break;
+  }
+  case "reset:token": {
+    // Stands in for the reset email: the newest reset token Better Auth stored for this test account.
+    const u = await testUser(args[0]);
+    const rows = u
+      ? await db.select({ identifier: verification.identifier }).from(verification)
+          .where(and(like(verification.identifier, "reset-password:%"), eq(verification.value, u.id)))
+          .orderBy(desc(verification.createdAt)).limit(1)
+      : [];
+    console.log(rows[0]?.identifier.slice("reset-password:".length) ?? "none");
     break;
   }
   case "cleanup:stale": {
