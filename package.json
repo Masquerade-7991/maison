@@ -17,7 +17,8 @@
     "check:payment": "tsx scripts/checks/payment.check.mts",
     "e2e:checkout": "node scripts/e2e/checkout.e2e.mjs",
     "e2e:admin-stock": "node scripts/e2e/admin-stock.e2e.mjs",
-    "e2e:admin-flow": "node scripts/e2e/admin-flow.e2e.mjs"
+    "e2e:admin-flow": "node scripts/e2e/admin-flow.e2e.mjs",
+    "e2e:customer-flow": "node scripts/e2e/customer-flow.e2e.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
