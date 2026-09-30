@@ -3,7 +3,7 @@
 // neither open the page nor replay its Server Action. Run: node scripts/e2e/admin-stock.e2e.mjs (see lib.mjs).
 // Uses one seeded product and puts its stock back afterwards; the two test accounts are deleted.
 import assert from "node:assert/strict";
-import { BASE, cleanup, db, launch, makeAdmin, pass, signUp, testEmail } from "./lib.mjs";
+import { BASE, cleanup, db, launch, makeAdmin, pass, replayHeaders, signUp, testEmail } from "./lib.mjs";
 
 const SLUG = "wicker-top-handle-bag";
 const NAME = "Wicker top-handle bag";
@@ -117,9 +117,8 @@ try {
   // only thing that can refuse this write is the role check (an admin sending it would succeed).
   const field = (name) => new RegExp(`(name="(?:_?\\d+_)?${name}"\\r\\n\\r\\n)\\d+`);
   assert.ok(field("stockQuantity").test(captured.body) && field("expectedStock").test(captured.body), "replay can rewrite the stock fields");
-  const { cookie: _c, host: _h, "content-length": _l, ...headers } = captured.headers;
   const replay = await customerPage.request.post(captured.url, {
-    headers,
+    headers: replayHeaders(captured.headers),
     data: captured.body.replace(field("expectedStock"), "$15").replace(field("stockQuantity"), "$1999"),
   });
   assert.equal(db("stock:get", SLUG), "5", "customer replay must not write");

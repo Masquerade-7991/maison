@@ -34,6 +34,10 @@ export const testEmail = (tag) => `qa.${tag}+${Date.now()}@example.com`;
 
 export const pass = (m) => console.log(`PASS ${m}`);
 
+/** A captured request's headers minus the ones the replaying browser context must supply itself. */
+export const replayHeaders = (headers) =>
+  Object.fromEntries(Object.entries(headers).filter(([k]) => !["cookie", "host", "content-length"].includes(k)));
+
 /** From /bag: checkout, pay on Stripe's hosted page with the test card, and wait for the success page. */
 export async function payWithTestCard(page) {
   await page.goto(`${BASE}/bag`);

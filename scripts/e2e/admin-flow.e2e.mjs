@@ -6,7 +6,7 @@
 // Run: node scripts/e2e/admin-flow.e2e.mjs (see lib.mjs for the server). The product is a throwaway
 // "qa-" product, deleted at the end with the two test accounts and their order.
 import assert from "node:assert/strict";
-import { BASE, cleanup, db, launch, makeAdmin, pass, payWithTestCard, signUp, testEmail } from "./lib.mjs";
+import { BASE, cleanup, db, launch, makeAdmin, pass, payWithTestCard, replayHeaders, signUp, testEmail } from "./lib.mjs";
 
 const ts = Date.now();
 const ADMIN = testEmail("admin");
@@ -43,8 +43,7 @@ async function replay(page, action, fields) {
     assert.ok(re.test(body), `replayed body has a "${k}" field`);
     body = body.replace(re, `$1${v}`);
   }
-  const { cookie, host, "content-length": _len, ...headers } = action.headers;
-  return page.request.post(action.url, { headers, data: body });
+  return page.request.post(action.url, { headers: replayHeaders(action.headers), data: body });
 }
 const statusOf = async (page, path) => (await page.goto(`${BASE}${path}`)).status();
 
