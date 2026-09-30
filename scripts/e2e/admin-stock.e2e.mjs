@@ -113,9 +113,14 @@ try {
   const res = await customerPage.goto(`${BASE}/admin/stock`);
   assert.equal(res.status(), 404);
   assert.ok(captured, "captured an action request");
+  // Next encodes the form fields as "_1_<name>". Set expectedStock to the real current number too, so the
+  // only thing that can refuse this write is the role check (an admin sending it would succeed).
+  const field = (name) => new RegExp(`(name="(?:_?\\d+_)?${name}"\\r\\n\\r\\n)\\d+`);
+  assert.ok(field("stockQuantity").test(captured.body) && field("expectedStock").test(captured.body), "replay can rewrite the stock fields");
+  const { cookie: _c, host: _h, "content-length": _l, ...headers } = captured.headers;
   const replay = await customerPage.request.post(captured.url, {
-    headers: { ...captured.headers, cookie: undefined },
-    data: captured.body.replace(/(name="stockQuantity"\r\n\r\n)\d+/, "$1999"),
+    headers,
+    data: captured.body.replace(field("expectedStock"), "$15").replace(field("stockQuantity"), "$1999"),
   });
   assert.equal(db("stock:get", SLUG), "5", "customer replay must not write");
   pass(`customer: /admin/stock is 404; replayed action → HTTP ${replay.status()}, database unchanged`);

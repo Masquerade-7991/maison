@@ -2,7 +2,7 @@
 // the order shows as paid. Run: node scripts/e2e/checkout.e2e.mjs (see lib.mjs for the server).
 // Uses Stripe's test card, so no money moves; cleanup puts the stock back and deletes the account.
 import assert from "node:assert/strict";
-import { BASE, cleanup, db, launch, pass, signUp, testEmail } from "./lib.mjs";
+import { BASE, cleanup, db, launch, pass, payWithTestCard, signUp, testEmail } from "./lib.mjs";
 
 const email = testEmail("checkout");
 const browser = await launch();
@@ -31,28 +31,8 @@ try {
   assert.equal(added, 2, "two buyable products added");
   pass("added two products to the bag");
 
-  await page.goto(`${BASE}/bag`);
-  await page.getByRole("button", { name: /checkout/i }).click();
-  await page.waitForURL(/checkout\.stripe\.com/, { timeout: 30000 });
-  const card = page.locator('[data-testid="card-accordion-item-button"]');
-  if (await card.isVisible().catch(() => false)) await card.click();
-  await page.fill("#shippingName", "QA Test");
-  await page.fill("#shippingAddressLine1", "1 Market St");
-  await page.keyboard.press("Escape"); // close the address autocomplete
-  await page.fill("#shippingLocality", "San Francisco");
-  await page.fill("#shippingPostalCode", "94105");
-  await page.selectOption("#shippingAdministrativeArea", "CA").catch(() => {});
-  await page.fill("#cardNumber", "4242424242424242");
-  await page.fill("#cardExpiry", "12 / 34");
-  await page.fill("#cardCvc", "123");
-  const billing = page.locator("#billingName");
-  if (await billing.isVisible().catch(() => false)) await billing.fill("QA Test");
-  await page.locator('[data-testid="hosted-payment-submit-button"], .SubmitButton').first().click();
-  await page.waitForURL(`${BASE}/checkout/success**`, { timeout: 60000 });
-  pass("paid with Stripe's test card and came back to /checkout/success");
-
-  await page.getByText("Order confirmed").first().waitFor({ timeout: 30000 }); // polls while the webhook lands
-  pass("success page confirms the order");
+  await payWithTestCard(page);
+  pass("paid with Stripe's test card; the success page confirms the order");
 
   await page.goto(`${BASE}/account/orders`);
   assert.match(await page.locator("main").innerText(), /Preparing/i, "the order shows as paid (Preparing)");

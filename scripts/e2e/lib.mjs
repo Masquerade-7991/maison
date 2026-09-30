@@ -15,20 +15,47 @@ const APP = fileURLToPath(new URL("../..", import.meta.url));
 
 export const launch = () => chromium.launch({ channel: process.env.BROWSER_CHANNEL ?? "msedge", headless: true });
 
+// npx is a .cmd on Windows, so it needs a shell, and a shell splits arguments on spaces: quote each one.
+const q = (a) => JSON.stringify(String(a));
+
 /** Runs a scripts/e2e/db.mts command and returns its output (lines joined with "; "). */
 export const db = (...args) =>
-  execFileSync("npx", ["tsx", "scripts/e2e/db.mts", ...args], { cwd: APP, shell: true, encoding: "utf8" })
+  execFileSync(["npx tsx scripts/e2e/db.mts", ...args.map(q)].join(" "), { cwd: APP, shell: true, encoding: "utf8" })
     .trim()
-    .split("\n")
-    .filter((l) => l.trim() && !l.includes("claude-code-hint"))
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l && !l.includes("claude-code-hint"))
     .join("; ");
 
 /** Makes an existing, verified test account an admin. */
-export const makeAdmin = (email) => execFileSync("npm", ["run", "auth:set-role", "--", email, "admin"], { cwd: APP, shell: true, stdio: "ignore" });
+export const makeAdmin = (email) => execFileSync(`npm run auth:set-role -- ${q(email)} admin`, { cwd: APP, shell: true, stdio: "ignore" });
 
 export const testEmail = (tag) => `qa.${tag}+${Date.now()}@example.com`;
 
 export const pass = (m) => console.log(`PASS ${m}`);
+
+/** From /bag: checkout, pay on Stripe's hosted page with the test card, and wait for the success page. */
+export async function payWithTestCard(page) {
+  await page.goto(`${BASE}/bag`);
+  await page.getByRole("button", { name: /checkout/i }).click();
+  await page.waitForURL(/checkout\.stripe\.com/, { timeout: 30000 });
+  const card = page.locator('[data-testid="card-accordion-item-button"]');
+  if (await card.isVisible().catch(() => false)) await card.click();
+  await page.fill("#shippingName", "QA Test");
+  await page.fill("#shippingAddressLine1", "1 Market St");
+  await page.keyboard.press("Escape"); // close the address autocomplete
+  await page.fill("#shippingLocality", "San Francisco");
+  await page.fill("#shippingPostalCode", "94105");
+  await page.selectOption("#shippingAdministrativeArea", "CA").catch(() => {});
+  await page.fill("#cardNumber", "4242424242424242");
+  await page.fill("#cardExpiry", "12 / 34");
+  await page.fill("#cardCvc", "123");
+  const billing = page.locator("#billingName");
+  if (await billing.isVisible().catch(() => false)) await billing.fill("QA Test");
+  await page.locator('[data-testid="hosted-payment-submit-button"], .SubmitButton').first().click();
+  await page.waitForURL(`${BASE}/checkout/success**`, { timeout: 60000 });
+  await page.getByText("Order confirmed").first().waitFor({ timeout: 30000 }); // polls while the webhook lands
+}
 
 /** Runs a cleanup step and says so loudly (with the manual command) if it fails, e.g. on a network blip. */
 export function cleanup(label, fn, emails) {

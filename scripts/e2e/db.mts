@@ -61,6 +61,34 @@ switch (cmd) {
     }
     break;
   }
+  case "product:get": {
+    const [p] = await db.select({ id: products.id, name: products.name, priceCents: products.priceCents, stock: products.stockQuantity }).from(products).where(eq(products.slug, args[0]));
+    console.log(JSON.stringify(p ?? null));
+    break;
+  }
+  case "product:delete": {
+    // Test products only (slug starts with "qa-"); images and bag lines cascade, order items keep their snapshot.
+    if (!args[0]?.startsWith("qa-")) throw new Error(`refusing to delete non-test product ${args[0]}`);
+    const gone = await db.delete(products).where(eq(products.slug, args[0])).returning({ id: products.id });
+    console.log(`${args[0]}: ${gone.length ? "deleted" : "not found"}`);
+    break;
+  }
+  case "products:count": {
+    // How many products have a name starting with the given text (e.g. a replayed create must add none).
+    const rows = await db.select({ id: products.id }).from(products).where(like(products.name, `${args[0]}%`));
+    console.log(rows.length);
+    break;
+  }
+  case "user:get": {
+    const [u] = await db.select({ id: user.id, role: user.role }).from(user).where(eq(user.email, args[0]));
+    console.log(JSON.stringify(u ?? null));
+    break;
+  }
+  case "order:get": {
+    const [o] = await db.select({ status: orders.status, fulfilment: orders.fulfilmentStatus, carrier: orders.carrier }).from(orders).where(eq(orders.id, args[0]));
+    console.log(JSON.stringify(o ?? null));
+    break;
+  }
   case "cleanup:stale": {
     // Test accounts left behind by an interrupted run.
     const stale = await db.select({ email: user.email }).from(user).where(and(like(user.email, "qa.%"), like(user.email, "%@example.com")));
@@ -68,6 +96,6 @@ switch (cmd) {
     break;
   }
   default:
-    console.log("commands: stock:get <slug> | stock:set <slug> <n> | orders <email> | cleanup <email…> | cleanup:stale");
+    console.log("commands: stock:get <slug> | stock:set <slug> <n> | product:get <slug> | product:delete <qa-slug> | products:count <name prefix> | user:get <email> | order:get <id> | orders <email> | cleanup <email…> | cleanup:stale");
 }
 process.exit(0);
