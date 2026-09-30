@@ -12,7 +12,11 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx scripts/seed.ts",
-    "auth:set-role": "tsx scripts/set-role.ts"
+    "auth:set-role": "tsx scripts/set-role.ts",
+    "check": "node scripts/checks/run.mjs",
+    "check:payment": "tsx scripts/checks/payment.check.mts",
+    "e2e:checkout": "node scripts/e2e/checkout.e2e.mjs",
+    "e2e:admin-stock": "node scripts/e2e/admin-stock.e2e.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
@@ -32,6 +36,7 @@
     "drizzle-kit": "^0.31.11",
     "eslint": "^9",
     "eslint-config-next": "16.3.6",
+    "playwright-core": "^1.63.0",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5"

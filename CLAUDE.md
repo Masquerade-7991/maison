@@ -20,7 +20,12 @@ npm run db:seed      # Re-seed the catalogue from scripts/seed.ts (clears it fir
 
 `node_modules` is pnpm-managed: install with `pnpm add`, never `npm install` (there is no `package-lock.json`; `package.json` pins pnpm in `packageManager`). `npm run <script>` still works. pnpm refuses to run anything unless `allowBuilds` in `pnpm-workspace.yaml` holds real `true`/`false` values.
 
-No test runner is configured yet. The pure rules are covered by `node`-run check scripts (Node 23+ strips the TS types): `src/lib/listing.check.mjs` (listing filters/sorts, every `stockState` branch), `cart-rules`, `order-rules`, `admin-rules` and `auth-validation` `.check.mjs` beside their modules, and `src/app/admin/admin-guard.check.mjs` (every admin page/action/data function checks the role). Run them all with `for f in $(find src -name "*.check.mjs"); do node $f; done`.
+No test runner is configured yet. The pure rules are covered by `node`-run check scripts (Node 23+ strips the TS types): `src/lib/listing.check.mjs` (listing filters/sorts, every `stockState` branch), `cart-rules`, `order-rules`, `admin-rules` and `auth-validation` `.check.mjs` beside their modules, and `src/app/admin/admin-guard.check.mjs` (every admin page/action/data function checks the role). Run them all with `npm run check`.
+
+Beyond the pure rules (these talk to the shared `production` database and clean up after themselves; test accounts are always `qa.…@example.com`):
+
+- `npm run check:payment`: `applyCheckoutSession` against the real database with simulated Stripe sessions (duplicate and concurrent deliveries, last-unit race, shortfall, made-to-order, processing, the completed/succeeded race). No Stripe calls.
+- `npm run e2e:checkout` and `npm run e2e:admin-stock`: browser runs through `playwright-core` driving an installed Edge (`BROWSER_CHANNEL=chrome` for Chrome), against `npm run build` then `EMAIL_LINKS_ON_PAGE=true BETTER_AUTH_URL=http://localhost:3100 npx next start -p 3100` (`BASE` overrides the URL). The checkout run pays with Stripe's test card in the Maison sandbox. Production mode allows 3 sign-ups a minute, so leave a minute between the two. `npx tsx scripts/e2e/db.mts cleanup:stale` lists test accounts an interrupted run left behind; `cleanup <email…>` removes them and puts their paid stock back.
 
 ## Architecture
 
