@@ -424,6 +424,38 @@
   }
 }
 
+/* Parallax: every next/image `fill` image drifts against the scroll as it crosses the viewport (about 10% of
+   its frame each way over the full pass), so photos move a little slower than the page. CSS only, like `reveal`:
+   browsers without scroll-driven animations and visitors who prefer reduced motion get still images.
+   - The image is 24% taller than its frame (12% spare above and below) so the drift never shows an edge;
+     !important beats the inline inset next/image writes.
+   - Frames switch from overflow: hidden to clip. Both crop, but hidden makes the frame a scroll container,
+     and view() would then follow that frame (which never scrolls) instead of the page.
+   - It animates `translate`, a separate property from `transform`, so hover zooms still compose with it.
+   Unlayered on purpose, so it wins over the utilities layer (overflow-hidden, media-*). */
+@keyframes parallax {
+  from {
+    translate: 0 -8%;
+  }
+  to {
+    translate: 0 8%;
+  }
+}
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    :where(*):has(> img[data-nimg="fill"]) {
+      overflow: clip;
+    }
+    img[data-nimg="fill"] {
+      top: -12% !important;
+      height: 124% !important;
+      animation: parallax linear both;
+      animation-timeline: view();
+      animation-range: cover;
+    }
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
