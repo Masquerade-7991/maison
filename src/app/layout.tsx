@@ -4,6 +4,7 @@ import Link from "next/link";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
 import { BagLink } from "@/components/bag-link";
+import { MarketSelector } from "@/components/market-selector";
 import { Menu } from "@/components/menu";
 import { ThemeToggle, themeScript } from "@/components/theme-toggle";
 import { footer, nav } from "@/lib/sample-data";
@@ -102,7 +103,10 @@ function Footer() {
         ))}
       </div>
       <div className="container-page rule flex flex-col gap-2 py-6 text-label text-muted uppercase sm:flex-row sm:justify-between">
-        <p>© {new Date().getFullYear()} Maison</p>
+        <p className="flex flex-wrap gap-x-6 gap-y-2">
+          <span>© {new Date().getFullYear()} Maison</span>
+          <MarketSelector />
+        </p>
         <p>Imagery courtesy of Unsplash</p>
       </div>
     </footer>

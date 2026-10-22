@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { formatCents } from "@/lib/format";
+import { formatMoney } from "@/lib/format";
 import type { getOrderForUser } from "@/lib/orders";
 
 export type Order = NonNullable<Awaited<ReturnType<typeof getOrderForUser>>>;
@@ -24,9 +24,9 @@ export function OrderDetails({ order }: { order: Order }) {
                 <p className="mt-1 text-muted">
                   {[i.size && `Size ${i.size}`, `Qty ${i.quantity}`].filter(Boolean).join(" · ")}
                 </p>
-                {i.quantity > 1 && <p className="mt-1 text-muted tabular-nums">{formatCents(i.unitPriceCents)} each</p>}
+                {i.quantity > 1 && <p className="mt-1 text-muted tabular-nums">{formatMoney(i.unitPriceCents, order.currency)} each</p>}
               </div>
-              <p className="tabular-nums">{formatCents(i.unitPriceCents * i.quantity)}</p>
+              <p className="tabular-nums">{formatMoney(i.unitPriceCents * i.quantity, order.currency)}</p>
             </li>
           ))}
         </ul>
@@ -40,11 +40,11 @@ export function OrderDetails({ order }: { order: Order }) {
 export function OrderTotals({ order, className = "" }: { order: Order; className?: string }) {
   return (
     <dl className={`space-y-3 ${className}`}>
-      <div className="flex justify-between"><dt>Subtotal</dt><dd className="tabular-nums">{formatCents(order.subtotalCents)}</dd></div>
+      <div className="flex justify-between"><dt>Subtotal</dt><dd className="tabular-nums">{formatMoney(order.subtotalCents, order.currency)}</dd></div>
       <div className="flex justify-between"><dt>Shipping</dt><dd className="text-muted">Complimentary</dd></div>
       <div className="rule flex items-baseline justify-between pt-4">
         <dt className="label">{order.status === "paid" ? "Paid" : "Total"}</dt>
-        <dd className="text-display-sm tabular-nums">{formatCents(order.amountTotalCents ?? order.subtotalCents)}</dd>
+        <dd className="text-display-sm tabular-nums">{formatMoney(order.amountTotalCents ?? order.subtotalCents, order.currency)}</dd>
       </div>
     </dl>
   );

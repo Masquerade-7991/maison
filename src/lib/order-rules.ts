@@ -83,7 +83,7 @@ export const orderStatusTone: Record<OrderStatus, string> = {
 /**
  * Refund wording, derived from Stripe's cumulative refunded amount (refunds are issued in the Stripe
  * Dashboard and recorded by the charge.refunded webhook). Kept beside `status`, which stays "paid".
- * The formatter is passed in so this file stays import-free for the check script; pass formatCents.
+ * The formatter is passed in so this file stays import-free for the check script; pass formatMoney bound to the order's currency.
  */
 export function refundLabel(refundedCents: number, totalCents: number, format: (cents: number) => string): string | null {
   if (refundedCents <= 0) return null;

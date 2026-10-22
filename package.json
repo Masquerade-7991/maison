@@ -20,7 +20,8 @@
     "e2e:admin-flow": "node scripts/e2e/admin-flow.e2e.mjs",
     "e2e:customer-flow": "node scripts/e2e/customer-flow.e2e.mjs",
     "e2e:password-reset": "node scripts/e2e/password-reset.e2e.mjs",
-    "e2e:contact": "node scripts/e2e/contact.e2e.mjs"
+    "e2e:contact": "node scripts/e2e/contact.e2e.mjs",
+    "e2e:markets": "node scripts/e2e/markets.e2e.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

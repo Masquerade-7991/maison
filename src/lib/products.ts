@@ -1,9 +1,11 @@
-// The only module that reads the catalogue from the database. Pages call these and get the
-// mapped Product type: dollars instead of cents, images ordered, isNew derived.
+// The only module that reads the catalogue from the database. Pages call these with a market id and get
+// the mapped Product type: prices in that market's currency, images ordered, isNew derived.
 import { cache } from "react";
 import { count, desc, eq, isNotNull, sql, type AnyColumn } from "drizzle-orm";
 import { db } from "@/db";
 import { categories, products, type department } from "@/db/schema";
+import { getRates } from "@/lib/fx";
+import { localPair, marketById, type Rates } from "@/lib/markets";
 
 // "New" = among the 12 most recently added products. Derived, never stored.
 export const NEW_COUNT = 12;
@@ -14,8 +16,12 @@ export type Product = {
   slug: string;
   name: string;
   description: string;
+  /** Minor units of `currency`, the visitor's market: what the card shows and checkout charges. */
   price: number;
   compareAt: number | null;
+  currency: string;
+  /** The stored USD price, in cents; the same in every market. */
+  priceUsdCents: number;
   category: { slug: string; name: string };
   department: Department;
   colour: string;
@@ -34,14 +40,18 @@ type Row = typeof products.$inferSelect & {
   images: { url: string; alt: string }[];
 };
 
-// The only place cents become dollars.
-function mapProduct(r: Row): Product {
+// The only place a stored USD price becomes a market price (src/lib/markets.ts localPair).
+function mapProduct(r: Row, marketId: string, rates: Rates): Product {
+  const market = marketById(marketId);
+  const local = localPair(r.priceCents, r.compareAtCents, market, rates);
   return {
     slug: r.slug,
     name: r.name,
     description: r.description,
-    price: r.priceCents / 100,
-    compareAt: r.compareAtCents === null ? null : r.compareAtCents / 100,
+    price: local.price,
+    compareAt: local.compareAt,
+    currency: market.currency,
+    priceUsdCents: r.priceCents,
     category: { slug: r.category.slug, name: r.category.name },
     department: r.department,
     colour: r.colour,
@@ -79,8 +89,8 @@ const searchTerms = (q: string) =>
     .map((w) => `%${(w.length > 3 ? w.replace(/s$/, "") : w).replace(/[\\%_]/g, "\\$&")}%`);
 
 // One view's products, newest first, packshot only.
-export async function listProducts(scope: ListScope): Promise<Product[]> {
-  const rows = await db.query.products.findMany({
+export async function listProducts(scope: ListScope, marketId: string): Promise<Product[]> {
+  const [rows, rates] = await Promise.all([db.query.products.findMany({
     where: (p, { and, eq, ilike, inArray, or }) =>
       "category" in scope
         ? inArray(p.categoryId, db.select({ id: categories.id }).from(categories).where(eq(categories.slug, scope.category)))
@@ -108,28 +118,28 @@ export async function listProducts(scope: ListScope): Promise<Product[]> {
       category: { columns: { slug: true, name: true } },
       images: { columns: { url: true, alt: true }, orderBy: (i, { asc }) => [asc(i.position)], limit: 1 },
     },
-  });
-  return rows.map(mapProduct);
+  }), getRates()]);
+  return rows.map((r) => mapProduct(r, marketId, rates));
 }
 
-export const getNewArrivals = (limit: number) => listProducts({ newest: limit });
+export const getNewArrivals = (limit: number, marketId: string) => listProducts({ newest: limit }, marketId);
 
 // Cached per request so generateMetadata and the page share one query.
-export const getProductBySlug = cache(async (slug: string): Promise<Product | null> => {
-  const row = await db.query.products.findFirst({
+export const getProductBySlug = cache(async (slug: string, marketId: string): Promise<Product | null> => {
+  const [row, rates] = await Promise.all([db.query.products.findFirst({
     where: (p, { eq }) => eq(p.slug, slug),
     extras: (p) => ({ isNew: isNewExtra(p) }),
     with: {
       category: { columns: { slug: true, name: true } },
       images: { columns: { url: true, alt: true }, orderBy: (i, { asc }) => [asc(i.position)] },
     },
-  });
-  return row ? mapProduct(row) : null;
+  }), getRates()]);
+  return row ? mapProduct(row, marketId, rates) : null;
 });
 
 // Same category first, then same department, then newest.
-export async function getRelated(product: Product, n = 4): Promise<Product[]> {
-  const rows = await db.query.products.findMany({
+export async function getRelated(product: Product, marketId: string, n = 4): Promise<Product[]> {
+  const [rows, rates] = await Promise.all([db.query.products.findMany({
     where: (p, { ne }) => ne(p.slug, product.slug),
     orderBy: (p, { desc }) => [
       desc(sql`${p.categoryId} = (select id from categories where slug = ${product.category.slug})`),
@@ -142,8 +152,8 @@ export async function getRelated(product: Product, n = 4): Promise<Product[]> {
       category: { columns: { slug: true, name: true } },
       images: { columns: { url: true, alt: true }, orderBy: (i, { asc }) => [asc(i.position)], limit: 1 },
     },
-  });
-  return rows.map(mapProduct);
+  }), getRates()]);
+  return rows.map((r) => mapProduct(r, marketId, rates));
 }
 
 export const getCategoryBySlug = cache(async (slug: string) => {

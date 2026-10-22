@@ -3,6 +3,7 @@ import {
   bigint,
   boolean,
   check,
+  doublePrecision,
   index,
   integer,
   jsonb,
@@ -241,9 +242,13 @@ export const orders = pgTable(
     // Financial record: never cascaded away with the user.
     userId: text().notNull().references(() => user.id, { onDelete: "restrict" }),
     status: orderStatus().notNull().default("pending"),
-    subtotalCents: integer().notNull(), // from our products table at checkout start
+    // Every *Cents column on orders and order_items holds minor units of `currency` (cents, paise; whole
+    // yen and won), not necessarily US cents.
+    subtotalCents: integer().notNull(), // from our products table at checkout start, in the market's currency
     amountTotalCents: integer(), // what Stripe reports it charged, set on payment
-    currency: text().notNull().default("usd"),
+    currency: text().notNull().default("usd"), // Stripe's lower-case code
+    market: text().notNull().default("us"), // src/lib/markets.ts id the order was priced and shipped in
+    usdRate: doublePrecision().notNull().default(1), // units of `currency` per USD used, for reporting in dollars
     stripeCheckoutSessionId: text().unique(),
     stripePaymentIntentId: text(),
     customerEmail: text(),
@@ -267,6 +272,15 @@ export const orders = pgTable(
     check("orders_refunded_non_negative", sql`${t.refundedCents} >= 0`),
   ],
 );
+
+// Units of each currency per US dollar, refreshed daily by /api/cron/fx (src/lib/fx.ts). A currency
+// with no row uses the fallback rate in src/lib/markets.ts.
+export const fxRates = pgTable("fx_rates", {
+  currency: text().primaryKey(), // ISO 4217, upper case
+  perUsd: doublePrecision().notNull(),
+  source: text().notNull(),
+  fetchedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+});
 
 export const orderItems = pgTable(
   "order_items",

@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { currency } from "@/lib/format";
+import { formatMoney } from "@/lib/format";
 import type { Product } from "@/lib/products";
 import { stockCopy, stockState, stockTone } from "@/lib/stock";
 
@@ -40,10 +40,10 @@ export function ProductCard({
           {p.compareAt !== null && (
             <s className="text-muted">
               <span className="sr-only">Was </span>
-              {currency(p.compareAt)}
+              {formatMoney(p.compareAt, p.currency)}
             </s>
           )}
-          <span className={p.compareAt !== null ? "text-ink" : "text-muted"}>{currency(p.price)}</span>
+          <span className={p.compareAt !== null ? "text-ink" : "text-muted"}>{formatMoney(p.price, p.currency)}</span>
         </p>
       </div>
       {/* Same dot and copy as the product page, so a card never promises more than the page will sell. */}

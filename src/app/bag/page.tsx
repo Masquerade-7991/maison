@@ -6,7 +6,9 @@ import { CheckoutButton } from "@/components/checkout-button";
 import { ProductCard } from "@/components/product-card";
 import { getBag } from "@/lib/cart";
 import { lineTotalCents, type BagLine } from "@/lib/cart-rules";
-import { formatCents } from "@/lib/format";
+import { formatMoney } from "@/lib/format";
+import { getMarket } from "@/lib/market-server";
+import { INTERNATIONAL } from "@/lib/markets";
 import { getNewArrivals } from "@/lib/products";
 import { services } from "@/lib/sample-data";
 import { requireUser } from "@/lib/session";
@@ -19,9 +21,10 @@ const pieces = (n: number) => `${n} ${n === 1 ? "piece" : "pieces"}`;
 export default async function BagPage({ searchParams }: PageProps<"/bag">) {
   const { user } = await requireUser("/bag");
   const cancelled = (await searchParams).checkout === "cancelled";
-  const bag = await getBag(user.id);
+  const market = await getMarket();
+  const bag = await getBag(user.id, market);
   const empty = bag.lines.length === 0;
-  const suggestions = empty ? await getNewArrivals(4) : [];
+  const suggestions = empty ? await getNewArrivals(4, market.id) : [];
 
   return (
     <section className="container-page py-12 md:py-20">
@@ -74,7 +77,7 @@ export default async function BagPage({ searchParams }: PageProps<"/bag">) {
             )}
             <ul>
               {bag.lines.map((l) => (
-                <BagItem key={`${l.slug}-${l.size}`} line={l} />
+                <BagItem key={`${l.slug}-${l.size}`} line={l} currency={bag.currency} />
               ))}
             </ul>
           </div>
@@ -86,7 +89,7 @@ export default async function BagPage({ searchParams }: PageProps<"/bag">) {
               <dl className="mt-6 space-y-3">
                 <div className="flex justify-between gap-4">
                   <dt>Subtotal <span className="text-muted">({pieces(bag.payableCount)})</span></dt>
-                  <dd className="tabular-nums">{formatCents(bag.subtotalCents)}</dd>
+                  <dd className="tabular-nums">{formatMoney(bag.subtotalCents, bag.currency)}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
                   <dt>Shipping</dt>
@@ -94,13 +97,15 @@ export default async function BagPage({ searchParams }: PageProps<"/bag">) {
                 </div>
                 <div className="rule flex items-baseline justify-between gap-4 pt-5 mt-5">
                   <dt className="label">Total</dt>
-                  <dd className="text-display-sm tabular-nums">{formatCents(bag.subtotalCents)}</dd>
+                  <dd className="text-display-sm tabular-nums">{formatMoney(bag.subtotalCents, bag.currency)}</dd>
                 </div>
               </dl>
               {bag.payableCount < bag.itemCount && <p className="mt-2 text-right text-muted">Excludes sold-out pieces.</p>}
               <CheckoutButton blocked={bag.hasIssues} />
               <p id="checkout-note" className="mt-3 text-center text-muted">
-                {bag.hasIssues ? "Review the marked pieces before checking out." : "Secure payment by Stripe. You'll add delivery details next."}
+                {bag.hasIssues
+                  ? "Review the marked pieces before checking out."
+                  : `Secure payment by Stripe in ${bag.currency}. You'll add a delivery address in ${market.id === INTERNATIONAL ? "the United States" : market.name} next.`}
               </p>
             </div>
             <ul className="mt-8 space-y-5 px-1">
@@ -124,7 +129,7 @@ const issueCopy = {
   over_stock: "Fewer are available than you have in your bag.",
 };
 
-function BagItem({ line: l }: { line: BagLine }) {
+function BagItem({ line: l, currency }: { line: BagLine; currency: string }) {
   const soldOut = l.issue === "sold_out";
   // Quiet by default: only mention stock when it's worth knowing (low, made to order) or a problem.
   const showStock = !l.issue && (l.stock === "low_stock" || l.stock === "made_to_order");
@@ -143,8 +148,8 @@ function BagItem({ line: l }: { line: BagLine }) {
             <p className="mt-2 text-muted">{[l.colour, l.size && `Size ${l.size}`].filter(Boolean).join(" · ")}</p>
           </div>
           <div className="shrink-0 sm:text-right">
-            <p className={`tabular-nums ${soldOut ? "text-muted line-through" : ""}`}>{formatCents(lineTotalCents(l.priceCents, l.quantity))}</p>
-            {l.quantity > 1 && <p className="mt-1 text-muted tabular-nums">{formatCents(l.priceCents)} each</p>}
+            <p className={`tabular-nums ${soldOut ? "text-muted line-through" : ""}`}>{formatMoney(lineTotalCents(l.priceCents, l.quantity), currency)}</p>
+            {l.quantity > 1 && <p className="mt-1 text-muted tabular-nums">{formatMoney(l.priceCents, currency)} each</p>}
           </div>
         </div>
 

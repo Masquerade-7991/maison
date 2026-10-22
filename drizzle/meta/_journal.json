@@ -57,6 +57,13 @@
       "when": 1790623679998,
       "tag": "0007_order_refunds",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792700046323,
+      "tag": "0008_right_terror",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { formatCents } from "@/lib/format";
+import { formatMoney } from "@/lib/format";
 import { listOrdersForUser } from "@/lib/orders";
 import { fulfilmentStatusCopy, orderReference, orderStatusCopy, orderStatusTone, refundLabel } from "@/lib/order-rules";
 import { requireUser } from "@/lib/session";
@@ -40,9 +40,9 @@ export default async function OrdersPage() {
                 </span>
                 <span className={`label col-start-2 row-start-1 text-right sm:col-start-3 ${o.fulfilmentStatus === "cancelled" ? "text-muted" : orderStatusTone[o.status]}`}>
                   {o.status === "paid" ? fulfilmentStatusCopy[o.fulfilmentStatus] : orderStatusCopy[o.status]}
-                  {o.refundedCents > 0 && <span className="block text-muted">{refundLabel(o.refundedCents, o.totalCents, formatCents)}</span>}
+                  {o.refundedCents > 0 && <span className="block text-muted">{refundLabel(o.refundedCents, o.totalCents, (c) => formatMoney(c, o.currency))}</span>}
                 </span>
-                <span className="col-start-2 row-start-2 text-right tabular-nums sm:col-start-4 sm:row-start-1">{formatCents(o.totalCents)}</span>
+                <span className="col-start-2 row-start-2 text-right tabular-nums sm:col-start-4 sm:row-start-1">{formatMoney(o.totalCents, o.currency)}</span>
               </Link>
             </li>
           ))}

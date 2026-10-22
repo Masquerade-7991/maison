@@ -39,18 +39,21 @@ export const replayHeaders = (headers) =>
   Object.fromEntries(Object.entries(headers).filter(([k]) => !["cookie", "host", "content-length"].includes(k)));
 
 /** From /bag: checkout, pay on Stripe's hosted page with the test card, and wait for the success page. */
-export async function payWithTestCard(page) {
+const US_ADDRESS = { line1: "1 Market St", city: "San Francisco", postal: "94105", state: "CA" };
+
+/** Pays the bag on Stripe's hosted page. `address` must be in the market's country (Checkout only offers those). */
+export async function payWithTestCard(page, address = US_ADDRESS) {
   await page.goto(`${BASE}/bag`);
   await page.getByRole("button", { name: /checkout/i }).click();
   await page.waitForURL(/checkout\.stripe\.com/, { timeout: 30000 });
   const card = page.locator('[data-testid="card-accordion-item-button"]');
   if (await card.isVisible().catch(() => false)) await card.click();
   await page.fill("#shippingName", "QA Test");
-  await page.fill("#shippingAddressLine1", "1 Market St");
+  await page.fill("#shippingAddressLine1", address.line1);
   await page.keyboard.press("Escape"); // close the address autocomplete
-  await page.fill("#shippingLocality", "San Francisco");
-  await page.fill("#shippingPostalCode", "94105");
-  await page.selectOption("#shippingAdministrativeArea", "CA").catch(() => {});
+  await page.fill("#shippingLocality", address.city).catch(() => {}); // not every country's form has it
+  await page.fill("#shippingPostalCode", address.postal);
+  await page.selectOption("#shippingAdministrativeArea", address.state).catch(() => {});
   await page.fill("#cardNumber", "4242424242424242");
   await page.fill("#cardExpiry", "12 / 34");
   await page.fill("#cardCvc", "123");

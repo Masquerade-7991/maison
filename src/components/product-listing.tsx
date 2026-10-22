@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Menu } from "@/components/menu";
 import { ProductCard } from "@/components/product-card";
+import type { Pricing } from "@/lib/fx";
 import { colourSwatch, filterProducts, priceBands, sorts, type Filters } from "@/lib/listing";
 import type { Product } from "@/lib/products";
 
@@ -46,6 +47,7 @@ export function ProductListing({
   title,
   intro,
   products,
+  pricing,
   searchParams: sp,
   tabs,
   showNew = true,
@@ -54,6 +56,8 @@ export function ProductListing({
   title: string;
   intro: string;
   products: Product[];
+  /** The market the products are priced in: price bands convert and write their thresholds with it. */
+  pricing: Pricing;
   searchParams: SearchParams;
   tabs?: ListingTabs;
   /** Off where every piece is new anyway (/new-arrivals), so the tag doesn't drown out "Sold out". */
@@ -73,13 +77,13 @@ export function ProductListing({
   const tabOptions = tabs?.options.filter((o) => filterProducts(products, { [tabs.param]: o.value }).length > 0) ?? [];
   const inTab = tabs ? filterProducts(products, { [tabs.param]: tab }) : products;
   const colours = Object.keys(colourSwatch).filter((c) => inTab.some((p) => p.colour === c));
-  const results = filterProducts(products, filters);
+  const results = filterProducts(products, filters, pricing.at);
 
   const band = priceBands.find((b) => b.slug === filters.price);
   const activeSort = sorts.find((s) => s.slug === filters.sort) ?? sorts[0];
   const active = [
     filters.colour && { label: filters.colour, href: qs(filters, { colour: undefined }) },
-    band && { label: band.label, href: qs(filters, { price: undefined }) },
+    band && { label: band.label(pricing.fmt), href: qs(filters, { price: undefined }) },
   ].filter(Boolean) as { label: string; href: string }[];
 
   return (
@@ -174,7 +178,7 @@ export function ProductListing({
                             aria-pressed={on}
                             className={on ? "underline underline-offset-4" : "text-muted hover:text-ink"}
                           >
-                            {b.label}
+                            {b.label(pricing.fmt)}
                           </Link>
                         </li>
                       );

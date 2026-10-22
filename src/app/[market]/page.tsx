@@ -6,8 +6,9 @@ import { atelier, hero, services } from "@/lib/sample-data";
 
 export const revalidate = 300;
 
-export default async function Home() {
-  const [collections, newArrivals] = await Promise.all([getCollections(), getNewArrivals(8)]);
+export default async function Home({ params }: PageProps<"/[market]">) {
+  const { market } = await params;
+  const [collections, newArrivals] = await Promise.all([getCollections(), getNewArrivals(8, market)]);
 
   return (
     <>

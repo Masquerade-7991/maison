@@ -6,7 +6,7 @@ import type Stripe from "stripe";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { OrderDelivery, OrderTotals } from "@/components/order-details";
 import { emailIsOff } from "@/lib/email";
-import { formatCents } from "@/lib/format";
+import { formatMoney } from "@/lib/format";
 import { applyCheckoutSession, getOrderForUser } from "@/lib/orders";
 import { intentStatus, orderReference, orderStatusCopy, sessionEvent } from "@/lib/order-rules";
 import { requireUser } from "@/lib/session";
@@ -57,6 +57,7 @@ export default async function CheckoutSuccessPage({ searchParams }: PageProps<"/
   const reference = orderReference(order.id);
   const city = (order.shippingAddress as { city?: string | null } | null)?.city;
   const pieces = order.items.reduce((n, i) => n + i.quantity, 0);
+  const money = (minor: number) => formatMoney(minor, order.currency);
 
   // Email is off in development and on the test site (EMAIL_LINKS_ON_PAGE): don't promise a receipt then.
   const receipts = !emailIsOff();
@@ -163,8 +164,8 @@ export default async function CheckoutSuccessPage({ searchParams }: PageProps<"/
                 </Link>
                 <p className="mt-1 text-muted">{[i.size && `Size ${i.size}`, `Qty ${i.quantity}`].filter(Boolean).join(" · ")}</p>
                 <p className="mt-1 tabular-nums">
-                  {formatCents(i.unitPriceCents * i.quantity)}
-                  {i.quantity > 1 && <span className="text-muted"> · {formatCents(i.unitPriceCents)} each</span>}
+                  {money(i.unitPriceCents * i.quantity)}
+                  {i.quantity > 1 && <span className="text-muted"> · {money(i.unitPriceCents)} each</span>}
                 </p>
               </li>
             ))}

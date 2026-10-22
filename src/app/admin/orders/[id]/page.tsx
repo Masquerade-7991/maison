@@ -5,7 +5,8 @@ import { FulfilmentForm } from "@/components/admin/fulfilment-form";
 import { OrderDetails } from "@/components/order-details";
 import { getAdminOrder } from "@/lib/admin-orders";
 import { isUuid } from "@/lib/admin-rules";
-import { formatCents } from "@/lib/format";
+import { formatMoney } from "@/lib/format";
+import { marketById, toUsdCents } from "@/lib/markets";
 import { fulfilmentStatusCopy, orderReference, orderStatusCopy, orderStatusTone, refundLabel } from "@/lib/order-rules";
 import { requireAdmin } from "@/lib/session";
 
@@ -19,7 +20,7 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
   const order = isUuid(id) ? await getAdminOrder(id) : null;
   if (!order) notFound();
   const paid = order.status === "paid";
-  const refund = refundLabel(order.refundedCents, order.amountTotalCents ?? order.subtotalCents, formatCents);
+  const refund = refundLabel(order.refundedCents, order.amountTotalCents ?? order.subtotalCents, (c) => formatMoney(c, order.currency));
 
   return (
     <>
@@ -31,6 +32,13 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
             {order.customerEmail ?? order.accountEmail} · Placed {date.format(order.createdAt)}
             {order.paidAt && ` · Paid ${date.format(order.paidAt)}`}
           </p>
+          {order.currency !== "usd" && (
+            <p className="mt-1 text-muted">
+              {marketById(order.market).name}, paid in {order.currency.toUpperCase()} · ≈{" "}
+              {formatMoney(toUsdCents(order.amountTotalCents ?? order.subtotalCents, order.currency, order.usdRate))} at {order.usdRate}{" "}
+              {order.currency.toUpperCase()} per USD
+            </p>
+          )}
         </div>
         <p className="label">
           <span className={orderStatusTone[order.status]}>{orderStatusCopy[order.status]}</span>

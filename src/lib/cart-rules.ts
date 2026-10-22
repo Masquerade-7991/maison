@@ -42,7 +42,7 @@ export type BagLine = {
   size: string;
   imageUrl: string | null;
   imageAlt: string;
-  priceCents: number; // live from products, never stored with the line
+  priceCents: number; // minor units of the bag's currency, priced live from products, never stored with the line
   quantity: number;
   lineMax: number;
   allowed: number;
@@ -52,5 +52,17 @@ export type BagLine = {
   stockDetail: string | null;
 };
 
-/** itemCount is everything in the bag; payableCount and subtotalCents leave out sold-out lines, which can't be ordered. */
-export type Bag = { lines: BagLine[]; itemCount: number; payableCount: number; subtotalCents: number; hasIssues: boolean };
+/**
+ * itemCount is everything in the bag; payableCount and subtotalCents leave out sold-out lines, which can't be ordered.
+ * Amounts are minor units of `currency`, the visitor's market, at today's rate (usdRate units per USD).
+ */
+export type Bag = {
+  lines: BagLine[];
+  itemCount: number;
+  payableCount: number;
+  subtotalCents: number;
+  hasIssues: boolean;
+  market: string;
+  currency: string;
+  usdRate: number;
+};

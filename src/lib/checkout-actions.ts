@@ -8,13 +8,13 @@ import Stripe from "stripe";
 import { getBag } from "@/lib/cart";
 import { applyCheckoutSession, attachSession, createPendingOrder, expireIfPending, unsettledOrdersFor } from "@/lib/orders";
 import { intentStatus, sessionEvent } from "@/lib/order-rules";
+import { getMarket } from "@/lib/market-server";
 import { getSession } from "@/lib/session";
 import { stripe } from "@/lib/stripe";
 import { checkoutAppearance } from "@/lib/stripe-branding";
 
 export type CheckoutState = { error: string } | null;
 
-const SHIP_TO = ["US"] as const; // countries Checkout collects a shipping address for
 // ponytail: 30 is Stripe's minimum, checked against Stripe's clock; the slack covers a server clock
 // running behind (a dev machine 66s slow had every session refused). Oversell window is ~35 minutes.
 const SESSION_MINUTES = 30 + 5;
@@ -27,7 +27,9 @@ export async function startCheckoutAction(): Promise<CheckoutState> {
   const { user } = session;
 
   // Stock revalidation: the authoritative check before any money is asked for.
-  const bag = await getBag(user.id);
+  // Priced in the visitor's market exactly as the bag page showed it; the delivery address must be in it too.
+  const market = await getMarket();
+  const bag = await getBag(user.id, market);
   if (bag.lines.length === 0 || bag.hasIssues) {
     revalidatePath("/bag"); // the page may be stale: re-render it so the marked pieces appear with the error
     return { error: bag.hasIssues ? "Availability has changed for some pieces. Please review the marked pieces first." : "Your bag is empty." };
@@ -100,7 +102,7 @@ export async function startCheckoutAction(): Promise<CheckoutState> {
         line_items: items.map((i) => ({
           quantity: i.quantity,
           price_data: {
-            currency: "usd",
+            currency: bag.currency.toLowerCase(),
             unit_amount: i.unitPriceCents,
             product_data: {
               name: i.size ? `${i.name} (size ${i.size})` : i.name,
@@ -112,7 +114,7 @@ export async function startCheckoutAction(): Promise<CheckoutState> {
         customer_email: user.email,
         metadata: { order_id: orderId },
         payment_intent_data: { metadata: { order_id: orderId } },
-        shipping_address_collection: { allowed_countries: [...SHIP_TO] },
+        shipping_address_collection: { allowed_countries: market.countries as Stripe.Checkout.SessionCreateParams.ShippingAddressCollection.AllowedCountry[] },
         success_url: `${base}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${base}/bag?checkout=cancelled`,
         expires_at: Math.floor(Date.now() / 1000) + SESSION_MINUTES * 60,

@@ -4,31 +4,35 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AddToBagForm } from "@/components/add-to-bag-form";
 import { ProductCard } from "@/components/product-card";
-import { currency } from "@/lib/format";
+import { formatMoney } from "@/lib/format";
 import { colourSwatch } from "@/lib/listing";
 import { getProductBySlug, getProductSlugs, getRelated } from "@/lib/products";
+import { DEFAULT_MARKET } from "@/lib/markets";
 import { detailsFor } from "@/lib/sample-data";
 import { isBuyable, stockCopy, stockState, stockTone } from "@/lib/stock";
 
 export const revalidate = 300;
 
-export async function generateMetadata({ params }: PageProps<"/products/[slug]">): Promise<Metadata> {
-  const p = await getProductBySlug((await params).slug);
+export async function generateMetadata({ params }: PageProps<"/[market]/products/[slug]">): Promise<Metadata> {
+  const { market, slug } = await params;
+  const p = await getProductBySlug(slug, market);
   return p ? { title: `${p.name} | Maison`, description: p.description } : {};
 }
 
-export async function generateStaticParams() {
-  return (await getProductSlugs()).map((slug) => ({ slug }));
+// Pre-built for the default market only; other markets render on first visit and are then cached the same way.
+export async function generateStaticParams({ params }: { params: { market: string } }) {
+  return params.market === DEFAULT_MARKET ? (await getProductSlugs()).map((slug) => ({ slug })) : [];
 }
 
-export default async function ProductPage({ params }: PageProps<"/products/[slug]">) {
-  const p = await getProductBySlug((await params).slug);
+export default async function ProductPage({ params }: PageProps<"/[market]/products/[slug]">) {
+  const { market, slug } = await params;
+  const p = await getProductBySlug(slug, market);
   if (!p) notFound();
 
   const state = stockState(p);
   const buyable = isBuyable(state);
   const { details, sizes } = detailsFor(p.category.slug);
-  const related = await getRelated(p);
+  const related = await getRelated(p, market);
   const department = p.department === "men" ? { href: "/men", label: "Men" } : { href: "/women", label: "Women" };
 
   return (
@@ -74,10 +78,10 @@ export default async function ProductPage({ params }: PageProps<"/products/[slug
               {p.compareAt !== null && (
                 <s className="text-muted">
                   <span className="sr-only">Was </span>
-                  {currency(p.compareAt)}
+                  {formatMoney(p.compareAt, p.currency)}
                 </s>
               )}
-              {currency(p.price)}
+              {formatMoney(p.price, p.currency)}
             </p>
 
             <p className="label mt-6 flex items-center gap-2" role="status">

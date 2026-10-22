@@ -24,7 +24,14 @@ export async function createPendingOrder(userId: string, bag: Bag) {
     quantity: l.quantity,
   }));
   await db.batch([
-    db.insert(orders).values({ id: orderId, userId, subtotalCents: bag.subtotalCents }),
+    db.insert(orders).values({
+      id: orderId,
+      userId,
+      subtotalCents: bag.subtotalCents,
+      currency: bag.currency.toLowerCase(), // Stripe's spelling, so it compares with session.currency
+      market: bag.market,
+      usdRate: bag.usdRate,
+    }),
     db.insert(orderItems).values(rows),
   ]);
   // Images go to Stripe's page only; they aren't part of the stored snapshot.
@@ -65,11 +72,16 @@ export async function applyCheckoutSession(
   const orderId = session.metadata?.order_id;
   if (!orderId) return null;
   const [order] = await db
-    .select({ id: orders.id, status: orders.status })
+    .select({ id: orders.id, status: orders.status, currency: orders.currency })
     .from(orders)
     .where(and(eq(orders.id, orderId), eq(orders.stripeCheckoutSessionId, session.id)))
     .limit(1);
   if (!order) return null;
+  // The session was built from this order in its currency; any other currency means it isn't that payment.
+  if (session.currency && session.currency !== order.currency) {
+    console.error("[orders] session currency does not match the order, not applied", { orderId, session: session.currency, order: order.currency });
+    return null;
+  }
 
   const next = nextStatus(order.status, event, session.payment_status);
   if (!next) return refreshStock({ orderId, status: order.status as OrderStatus, changed: false });
@@ -191,6 +203,7 @@ export async function listOrdersForUser(userId: string) {
       createdAt: orders.createdAt,
       totalCents: sql<number>`coalesce(${orders.amountTotalCents}, ${orders.subtotalCents})`,
       refundedCents: orders.refundedCents,
+      currency: orders.currency,
       // Spelled out: inside these subqueries ${orders.id} would render as a bare "id" (order_items.id).
       pieces: sql<number>`(select coalesce(sum(oi.quantity), 0)::int from order_items oi where oi.order_id = orders.id)`,
       firstItem: sql<string | null>`(select oi.name from order_items oi where oi.order_id = orders.id order by oi.name limit 1)`,

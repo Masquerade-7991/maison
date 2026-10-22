@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { OrderDetails } from "@/components/order-details";
 import { emailIsOff } from "@/lib/email";
-import { formatCents } from "@/lib/format";
+import { formatMoney } from "@/lib/format";
 import { applyCheckoutSession, getOrderForUser } from "@/lib/orders";
 import { fulfilmentStatusCopy, intentStatus, orderReference, orderStatusCopy, orderStatusTone, refundLabel, sessionEvent } from "@/lib/order-rules";
 import { requireUser } from "@/lib/session";
@@ -42,7 +42,7 @@ export default async function OrderPage({ params }: PageProps<"/account/orders/[
 
   const paid = order.status === "paid";
   const cancelled = paid && order.fulfilmentStatus === "cancelled";
-  const refund = refundLabel(order.refundedCents, order.amountTotalCents ?? order.subtotalCents, formatCents);
+  const refund = refundLabel(order.refundedCents, order.amountTotalCents ?? order.subtotalCents, (c) => formatMoney(c, order.currency));
   const note = !paid
     ? statusNote[order.status]
     : order.fulfilmentStatus === "shipped"

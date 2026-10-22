@@ -80,6 +80,15 @@ try {
   assert.equal((await order(o5.id)).stockShortfall, false);
   pass("made to order, 2 bought with 1 on hand → stock 0, never short");
 
+  // A session in another currency than its order is not that payment: nothing changes.
+  await setStock(A, 3);
+  const oc = await newOrder(a, 1);
+  const inr = { ...(oc.session() as object), currency: "inr" } as never;
+  assert.equal(await applyCheckoutSession(inr, "checkout.session.completed"), null);
+  assert.equal((await order(oc.id)).status, "pending");
+  assert.equal(await stock(A), 3);
+  pass("session currency differs from the order's → ignored, order still pending, stock untouched");
+
   // Completed but unpaid → processing without touching stock; success later → paid, decremented once.
   await setStock(A, 3);
   const o6 = await newOrder(a, 1);

@@ -24,6 +24,8 @@ export async function listAdminOrders({ status, fulfilment }: { status?: OrderSt
       fulfilmentStatus: orders.fulfilmentStatus,
       stockShortfall: orders.stockShortfall,
       refundedCents: orders.refundedCents,
+      currency: orders.currency,
+      usdRate: orders.usdRate,
       totalCents: sql<number>`coalesce(${orders.amountTotalCents}, ${orders.subtotalCents})`,
       // Spelled out: inside this subquery ${orders.id} would render as a bare "id" (order_items.id).
       pieces: sql<number>`(select coalesce(sum(oi.quantity), 0)::int from order_items oi where oi.order_id = orders.id)`,

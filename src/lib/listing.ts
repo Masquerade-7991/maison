@@ -19,10 +19,17 @@ export const colourSwatch: Record<string, string> = {
   Green: "#4e6b4a",
 };
 
+// Thresholds are USD cents; `at` turns one into the market's minor units (localPrice), so the band, its
+// label and the prices it filters are all in the same rounded local amounts. Identity = USD.
+type At = (usdCents: number) => number;
+const usd: At = (c) => c;
+/** Writes a USD-cents threshold as local money, for the band labels. */
+type Fmt = (usdCents: number) => string;
+
 export const priceBands = [
-  { slug: "under-35", label: "Under $35", test: (n: number) => n < 35 },
-  { slug: "35-100", label: "$35 – $100", test: (n: number) => n >= 35 && n <= 100 },
-  { slug: "over-100", label: "Over $100", test: (n: number) => n > 100 },
+  { slug: "under-35", label: (f: Fmt) => `Under ${f(3500)}`, test: (n: number, at: At) => n < at(3500) },
+  { slug: "35-100", label: (f: Fmt) => `${f(3500)} – ${f(10000)}`, test: (n: number, at: At) => n >= at(3500) && n <= at(10000) },
+  { slug: "over-100", label: (f: Fmt) => `Over ${f(10000)}`, test: (n: number, at: At) => n > at(10000) },
 ];
 
 export const sorts = [
@@ -47,14 +54,14 @@ type Listable = Pick<Product, "price" | "colour" | "department" | "createdAt" | 
 // ponytail: filters run in memory over one view's products; move them into the SQL where-clause
 // in src/lib/products.ts once a single view holds a few hundred products.
 // One value per filter; switch to string[] per key if multi-select is needed.
-export function filterProducts<T extends Listable>(list: T[], f: Filters): T[] {
+export function filterProducts<T extends Listable>(list: T[], f: Filters, at: At = usd): T[] {
   const band = priceBands.find((b) => b.slug === f.price);
   const out = list.filter(
     (p) =>
       (!f.category || p.category.slug === f.category) &&
       (!f.department || p.department === f.department || p.department === "unisex") &&
       (!f.colour || p.colour === f.colour) &&
-      (!band || band.test(p.price)),
+      (!band || band.test(p.price, at)),
   );
   const newest = (a: T, b: T) => b.createdAt.getTime() - a.createdAt.getTime();
   if (f.sort === "price-asc") out.sort((a, b) => a.price - b.price);

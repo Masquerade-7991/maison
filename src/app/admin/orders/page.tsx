@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { listAdminOrders } from "@/lib/admin-orders";
-import { formatCents } from "@/lib/format";
+import { formatMoney } from "@/lib/format";
+import { toUsdCents } from "@/lib/markets";
 import {
   fulfilmentStatusCopy,
   orderReference,
@@ -71,12 +72,15 @@ export default async function AdminOrdersPage({ searchParams }: PageProps<"/admi
                 </span>
                 <span className="min-w-0 truncate text-right text-muted lg:text-left">{o.email}</span>
                 <span className="hidden text-right tabular-nums lg:block">{o.pieces}</span>
-                <span className="text-right tabular-nums">{formatCents(o.totalCents)}</span>
+                <span className="text-right tabular-nums">
+                  {formatMoney(o.totalCents, o.currency)}
+                  {o.currency !== "usd" && <span className="block text-muted">≈ {formatMoney(toUsdCents(o.totalCents, o.currency, o.usdRate))}</span>}
+                </span>
                 <span className={`label ${orderStatusTone[o.status]}`}>{orderStatusCopy[o.status]}</span>
                 <span className="label col-span-2 flex flex-wrap gap-x-3 lg:col-span-1">
                   {o.status === "paid" ? fulfilmentStatusCopy[o.fulfilmentStatus] : <span className="text-muted">—</span>}
                   {o.stockShortfall && <span className="text-danger">Oversold</span>}
-                  {o.refundedCents > 0 && <span className="text-muted">{refundLabel(o.refundedCents, o.totalCents, formatCents)}</span>}
+                  {o.refundedCents > 0 && <span className="text-muted">{refundLabel(o.refundedCents, o.totalCents, (c) => formatMoney(c, o.currency))}</span>}
                 </span>
               </Link>
             </li>

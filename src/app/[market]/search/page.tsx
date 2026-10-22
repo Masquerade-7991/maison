@@ -5,10 +5,11 @@ import { getCategories, listProducts } from "@/lib/products";
 
 export const metadata: Metadata = { title: "Search | Maison" };
 
-export default async function SearchPage({ searchParams }: PageProps<"/search">) {
+export default async function SearchPage({ params, searchParams }: PageProps<"/[market]/search">) {
+  const { market } = await params;
   const raw = (await searchParams).q;
   const q = ((Array.isArray(raw) ? raw[0] : raw) ?? "").trim().slice(0, 100);
-  const [results, categories] = await Promise.all([q ? listProducts({ search: q }) : [], getCategories()]);
+  const [results, categories] = await Promise.all([q ? listProducts({ search: q }, market) : [], getCategories()]);
 
   const browse = (
     <nav aria-label="Collections" className="rule mt-10 pt-6">

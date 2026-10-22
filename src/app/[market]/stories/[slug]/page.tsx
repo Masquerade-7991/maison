@@ -4,19 +4,19 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ProductCard } from "@/components/product-card";
 import { StoryCard } from "@/components/story-card";
+import { DEFAULT_MARKET } from "@/lib/markets";
 import { getProductBySlug } from "@/lib/products";
 import { serif } from "@/lib/serif";
 import { formatStoryDate, getStory, readingMinutes, stories } from "@/lib/stories";
 
 // Static like product pages; "Shop the story" reads live products, refreshed on the same schedule.
 export const revalidate = 300;
-export const dynamicParams = false; // only the stories in src/lib/stories.ts; anything else is a 404
 
-export function generateStaticParams() {
-  return stories.map((s) => ({ slug: s.slug }));
+export function generateStaticParams({ params }: { params: { market: string } }) {
+  return params.market === DEFAULT_MARKET ? stories.map((s) => ({ slug: s.slug })) : [];
 }
 
-export async function generateMetadata({ params }: PageProps<"/stories/[slug]">): Promise<Metadata> {
+export async function generateMetadata({ params }: PageProps<"/[market]/stories/[slug]">): Promise<Metadata> {
   const s = getStory((await params).slug);
   return s
     ? {
@@ -27,11 +27,12 @@ export async function generateMetadata({ params }: PageProps<"/stories/[slug]">)
     : {};
 }
 
-export default async function StoryPage({ params }: PageProps<"/stories/[slug]">) {
-  const s = getStory((await params).slug);
+export default async function StoryPage({ params }: PageProps<"/[market]/stories/[slug]">) {
+  const { market, slug } = await params;
+  const s = getStory(slug);
   if (!s) notFound();
 
-  const products = (await Promise.all(s.shop.products.map((slug) => getProductBySlug(slug)))).filter((p) => p !== null);
+  const products = (await Promise.all(s.shop.products.map((slug) => getProductBySlug(slug, market)))).filter((p) => p !== null);
   const more = stories.filter((o) => o.slug !== s.slug).slice(0, 3);
 
   return (

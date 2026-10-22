@@ -4,10 +4,13 @@ import { and, asc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { cartItems, categories, productImages, products } from "@/db/schema";
 import { lineIssue, lineMax, maxAllowed, subtotalCents, type Bag, type BagLine } from "@/lib/cart-rules";
+import { getRates } from "@/lib/fx";
+import { localPrice, type Market } from "@/lib/markets";
 import { stockState } from "@/lib/stock";
 
-/** The signed-in user's bag, priced from the live products table. */
-export async function getBag(userId: string): Promise<Bag> {
+/** The signed-in user's bag, priced from the live products table in the visitor's market (as product pages show it). */
+export async function getBag(userId: string, market: Market): Promise<Bag> {
+  const rates = await getRates();
   const rows = await db
     .select({
       productId: cartItems.productId,
@@ -47,7 +50,7 @@ export async function getBag(userId: string): Promise<Bag> {
       size: r.size,
       imageUrl: r.imageUrl,
       imageAlt: r.imageAlt ?? r.name,
-      priceCents: r.priceCents,
+      priceCents: localPrice(r.priceCents, market, rates),
       quantity: r.quantity,
       allowed,
       lineMax: lineMax(allowed, productTotal, r.quantity),
@@ -65,6 +68,9 @@ export async function getBag(userId: string): Promise<Bag> {
     payableCount: payable.reduce((n, l) => n + l.quantity, 0),
     subtotalCents: subtotalCents(payable),
     hasIssues: lines.some((l) => l.issue),
+    market: market.id,
+    currency: market.currency,
+    usdRate: rates[market.currency] ?? market.fallbackRate,
   };
 }
 

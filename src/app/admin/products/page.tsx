@@ -3,7 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { listAdminProducts, listCategoryOptions } from "@/lib/admin-catalogue";
 import { isUuid } from "@/lib/admin-rules";
-import { formatCents } from "@/lib/format";
+import { formatMoney } from "@/lib/format";
 import { requireAdmin } from "@/lib/session";
 import { stockCopy, stockState, stockTone } from "@/lib/stock";
 
@@ -69,8 +69,8 @@ export default async function AdminProductsPage({ searchParams }: PageProps<"/ad
                   </span>
                   <span className="hidden text-muted lg:block"><span className="text-ink">{p.categoryName}</span><span className="block capitalize">{p.department}</span></span>
                   <span className="text-right tabular-nums">
-                    {formatCents(p.priceCents)}
-                    {p.compareAtCents && <span className="block text-muted line-through">{formatCents(p.compareAtCents)}</span>}
+                    {formatMoney(p.priceCents)}
+                    {p.compareAtCents && <span className="block text-muted line-through">{formatMoney(p.compareAtCents)}</span>}
                   </span>
                   <span className="label col-start-2 col-end-4 flex items-center gap-2 lg:col-auto">
                     <span aria-hidden className={`size-1.5 shrink-0 rounded-full ${stockTone[s]}`} />

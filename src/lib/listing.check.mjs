@@ -7,10 +7,10 @@ const d = (h) => new Date(Date.UTC(2026, 8, 1) - h * 3_600_000);
 const p = (slug, o) => ({ slug, price: 100, colour: "Black", department: "women", category: { slug: "bags" }, stockQuantity: 10, madeToOrder: false, createdAt: d(0), ...o });
 
 const list = [
-  p("a", { price: 30, colour: "Blue", createdAt: d(1) }),
-  p("b", { price: 130, department: "men", category: { slug: "shoes" }, createdAt: d(2) }),
-  p("c", { price: 53, department: "unisex", stockQuantity: 0, createdAt: d(0) }),
-  p("d", { price: 20, colour: "Blue", department: "men", createdAt: d(3) }),
+  p("a", { price: 3000, colour: "Blue", createdAt: d(1) }),
+  p("b", { price: 13000, department: "men", category: { slug: "shoes" }, createdAt: d(2) }),
+  p("c", { price: 5300, department: "unisex", stockQuantity: 0, createdAt: d(0) }),
+  p("d", { price: 2000, colour: "Blue", department: "men", createdAt: d(3) }),
 ];
 const slugs = (xs) => xs.map((x) => x.slug).join("");
 
