@@ -10,6 +10,7 @@ import { applyCheckoutSession, attachSession, createPendingOrder, expireIfPendin
 import { intentStatus, sessionEvent } from "@/lib/order-rules";
 import { getSession } from "@/lib/session";
 import { stripe } from "@/lib/stripe";
+import { checkoutAppearance } from "@/lib/stripe-branding";
 
 export type CheckoutState = { error: string } | null;
 
@@ -93,6 +94,7 @@ export async function startCheckoutAction(): Promise<CheckoutState> {
     const checkout = await client.checkout.sessions.create(
       {
         mode: "payment",
+        ...checkoutAppearance(base),
         line_items: items.map((i) => ({
           quantity: i.quantity,
           price_data: {
