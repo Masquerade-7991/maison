@@ -20,9 +20,9 @@ export const colourSwatch: Record<string, string> = {
 };
 
 export const priceBands = [
-  { slug: "under-500", label: "Under $500", test: (n: number) => n < 500 },
-  { slug: "500-1500", label: "$500 – $1,500", test: (n: number) => n >= 500 && n <= 1500 },
-  { slug: "over-1500", label: "Over $1,500", test: (n: number) => n > 1500 },
+  { slug: "under-35", label: "Under $35", test: (n: number) => n < 35 },
+  { slug: "35-100", label: "$35 – $100", test: (n: number) => n >= 35 && n <= 100 },
+  { slug: "over-100", label: "Over $100", test: (n: number) => n > 100 },
 ];
 
 export const sorts = [
