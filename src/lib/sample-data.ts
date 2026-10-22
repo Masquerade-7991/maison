@@ -6,15 +6,28 @@ export const nav = [
   { label: "Bags", href: "/collections/bags" },
   { label: "Accessories", href: "/collections/accessories" },
   { label: "Gifts", href: "/gifts" },
-  // ponytail: editorial section, 404s until it exists.
   { label: "Stories", href: "/stories" },
 ];
 
-// ponytail: only Contact us and About exist; the rest stay "#" placeholders until their pages do.
-export const footer: { title: string; links: { label: string; href?: string }[] }[] = [
-  { title: "Client services", links: [{ label: "Contact us", href: "/contact" }, { label: "Shipping" }, { label: "Returns" }, { label: "FAQ" }] },
-  { title: "The house", links: [{ label: "About", href: "/about" }, { label: "Sustainability" }, { label: "Careers" }, { label: "Stores" }] },
-  { title: "Legal", links: [{ label: "Privacy" }, { label: "Terms" }, { label: "Cookies" }, { label: "Accessibility" }] },
+// Only pages that exist. Add Shipping, Returns, FAQ and the legal pages here once they are written.
+export const footer: { title: string; links: { label: string; href: string }[] }[] = [
+  {
+    title: "Client services",
+    links: [
+      { label: "Contact us", href: "/contact" },
+      { label: "Your account", href: "/account" },
+      { label: "Your orders", href: "/account/orders" },
+    ],
+  },
+  {
+    title: "The house",
+    links: [
+      { label: "About", href: "/about" },
+      { label: "Stories", href: "/stories" },
+      { label: "New arrivals", href: "/new-arrivals" },
+      { label: "Gifts", href: "/gifts" },
+    ],
+  },
 ];
 
 export const hero = {
