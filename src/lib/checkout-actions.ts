@@ -15,7 +15,9 @@ import { checkoutAppearance } from "@/lib/stripe-branding";
 export type CheckoutState = { error: string } | null;
 
 const SHIP_TO = ["US"] as const; // countries Checkout collects a shipping address for
-const SESSION_MINUTES = 30; // Stripe's minimum; also the oversell window (no stock reservation)
+// ponytail: 30 is Stripe's minimum, checked against Stripe's clock; the slack covers a server clock
+// running behind (a dev machine 66s slow had every session refused). Oversell window is ~35 minutes.
+const SESSION_MINUTES = 30 + 5;
 const INTEGRATION_ID = "maison-bag-checkout-qvtmrkzd";
 
 // Used with useActionState; it ignores both the previous state and the (empty) form.
