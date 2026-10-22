@@ -1,20 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Geist, Geist_Mono } from "next/font/google";
+// Self-hosted (next/font/local inside the package): no Google Fonts request at build time, see CLAUDE.md.
+import { GeistMono } from "geist/font/mono";
+import { GeistSans } from "geist/font/sans";
 import { BagLink } from "@/components/bag-link";
+import { Menu } from "@/components/menu";
 import { ThemeToggle, themeScript } from "@/components/theme-toggle";
 import { footer, nav } from "@/lib/sample-data";
 import "./globals.css";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "Maison",
@@ -25,8 +18,9 @@ function Header() {
   return (
     <header className="sticky top-0 z-50 border-b border-line bg-paper">
       <div className="container-page grid h-header grid-cols-[1fr_auto_1fr] items-center">
-        {/* Compact menu below 1280px (six links + logo + utilities need the room): native <details>, no JS. */}
-        <details className="group xl:hidden">
+        {/* Compact menu below 1280px (the links + logo + utilities need the room): native <details>, which
+            Menu also closes on navigation, Esc and outside clicks. */}
+        <Menu className="group xl:hidden">
           <summary className="label cursor-pointer list-none [&::-webkit-details-marker]:hidden">
             <span className="group-open:hidden">Menu</span>
             <span className="hidden group-open:inline">Close</span>
@@ -46,7 +40,7 @@ function Header() {
               </li>
             </ul>
           </nav>
-        </details>
+        </Menu>
 
         <nav className="hidden xl:block" aria-label="Main">
           <ul className="flex gap-8">
@@ -87,7 +81,7 @@ function Header() {
 function Footer() {
   return (
     <footer className="mt-section border-t border-line">
-      <div className="container-page grid gap-10 py-16 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="container-page grid gap-10 py-16 sm:grid-cols-3">
         <div>
           <p className="text-xl tracking-[0.35em] uppercase">Maison</p>
           <p className="mt-4 max-w-xs text-muted">
@@ -100,11 +94,7 @@ function Footer() {
             <ul className="mt-5 space-y-3">
               {col.links.map((l) => (
                 <li key={l.label}>
-                  {l.href ? (
-                    <Link href={l.href} className="link-nav text-muted hover:text-ink">{l.label}</Link>
-                  ) : (
-                    <a href="#" className="link-nav text-muted hover:text-ink">{l.label}</a>
-                  )}
+                  <Link href={l.href} className="link-nav text-muted hover:text-ink">{l.label}</Link>
                 </li>
               ))}
             </ul>
@@ -123,7 +113,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${GeistSans.variable} ${GeistMono.variable} h-full antialiased`}
       suppressHydrationWarning // themeScript may set data-theme before React hydrates
     >
       <head>

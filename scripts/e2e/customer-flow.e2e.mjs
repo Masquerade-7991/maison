@@ -50,7 +50,8 @@ try {
   const nums = prices.map((t) => Number((t.match(/\$([\d,]+)\s*$/) ?? [])[1]?.replace(/,/g, ""))).filter((n) => n > 0);
   assert.ok(nums.length > 3 && nums.every((n, i) => i === 0 || nums[i - 1] <= n), `Bags sorted by price ascending: ${nums.join(", ")}`);
   await page.goto(`${BASE}/search?q=chain`);
-  assert.ok(await page.locator(`a[href="/products/${SLUG}"]`).first().isVisible(), "search finds the chain bag");
+  // /search streams behind a loading screen, so wait for the results rather than checking at load.
+  await page.locator(`a[href="/products/${SLUG}"]`).first().waitFor({ state: "visible", timeout: 10_000 });
   pass("browsed: homepage, Bags sorted by price (low to high), search for 'chain'");
 
   // ── View a product ───────────────────────────────────────────────────────────────────────────────

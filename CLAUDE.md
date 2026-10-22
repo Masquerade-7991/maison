@@ -56,7 +56,7 @@ Next.js 16 App Router, React 19, Tailwind v4 (PostCSS plugin only, no `tailwind.
 - `product_images.alt` belongs to the row, not the image (the same URL is reused with different copy). Position 0 is the packshot.
 - Pages never touch `db` directly; they call `src/lib/products.ts`. Listing filters run in memory over one view: a deliberate ceiling, move them into SQL once a view holds a few hundred products.
 - Categories are product types; department (`women`/`men`/`unisex`) is an enum and `isGift` a flag.
-- Admin image URLs must be on `images.unsplash.com`, the only host `next.config.ts` allows.
+- Admin image URLs must be on `images.unsplash.com`, the only host `next.config.ts` allows. `next/image` uses a custom loader (`src/lib/image-loader.ts`) that asks Unsplash's own CDN for the size and format, so images skip Vercel's optimizer.
 - "Notify me when it is available" on sold out product pages is a placeholder: it stores and sends nothing, and says so. Real alerts would need a table and an email when stock goes up from 0.
 
 ### Contact and About
@@ -67,7 +67,7 @@ Next.js 16 App Router, React 19, Tailwind v4 (PostCSS plugin only, no `tailwind.
 
 ### Caching
 
-Only `/` and `/products/[slug]` are static (ISR, `revalidate = 300`); every listing reads `searchParams` and renders per request. Every admin catalogue write and every paid order calls `revalidatePath("/", "layout")`. Next throws on that during a page render, so there it is swallowed and the webhook covers it. Keep `headers()` out of the root layout, or the two static routes turn dynamic. That's why the header's "Bag (n)" is `BagLink`, a client component that fetches `/api/bag/count` after load, on every navigation, and on the `bag:changed` window event (`announceBagChange()` in `cart-rules.ts`); anything new that changes the bag must fire that event.
+Only `/` and `/products/[slug]` are static (ISR, `revalidate = 300`); every listing reads `searchParams` and renders per request. Every admin catalogue write and every paid order calls `revalidatePath("/", "layout")`. Next throws on that during a page render, so there it is swallowed and the webhook covers it. Keep `headers()` out of the root layout, or the two static routes turn dynamic. `/api/bag/count` answers 0 without a database read when there is no session cookie. That's why the header's "Bag (n)" is `BagLink`, a client component that fetches `/api/bag/count` after load, on every navigation, and on the `bag:changed` window event (`announceBagChange()` in `cart-rules.ts`); anything new that changes the bag must fire that event.
 
 ### Auth and access
 
@@ -103,13 +103,15 @@ Every admin stock edit (product form and `/admin/stock`) posts the number it loa
 
 ## Deployment (internal test site)
 
-Vercel project `maison` (team `soumikchoudhury-7216s-projects`), linked to GitHub `Masquerade-7991/maison`; every push to `main` deploys to <https://maison-mu-seven.vercel.app>. It shares the Neon `production` branch, so testers' accounts and orders are real rows locally too.
+Vercel project `maison` (team `soumikchoudhury-7216s-projects`), linked to GitHub `Masquerade-7991/maison`; functions run in `cle1` (`vercel.json`), next to Neon's `aws-us-east-2`; every push to `main` deploys to <https://maison-mu-seven.vercel.app>. It shares the Neon `production` branch, so testers' accounts and orders are real rows locally too.
 
 - Production env: `DATABASE_URL` (pooled), its own `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` set to that exact origin (preview and hash URLs fail Better Auth's origin check, so sign in only works on the production domain), `STRIPE_SECRET_KEY` (Maison sandbox `rk_test_`), `STRIPE_WEBHOOK_SECRET` (dashboard endpoint `we_1UKkhb2akEdHkkSyvYfOLKTo`, the same five events, API version pinned to match `src/lib/stripe.ts`), `EMAIL_LINKS_ON_PAGE=true`, `ENABLE_EXPERIMENTAL_COREPACK=1` (pnpm from `packageManager`).
 - **Before any real launch:** remove `EMAIL_LINKS_ON_PAGE`, configure Resend, and switch to live Stripe keys.
 - A local `stripe listen` also receives the sandbox's events, so the site and local dev may both apply the same session; the status guard makes that harmless.
 
 ## Next.js 16 notes
+
+- `loading.tsx` only goes on routes that never call `notFound()` (today: women, men, gifts, new-arrivals, search, bag). Once a loading screen streams, the status is already sent, so a missing product would answer 200 instead of 404.
 
 - Route `params` and `searchParams` are Promises and must be awaited.
 - Pages and layouts use the generated `PageProps<"/route">` / `LayoutProps<"/route">` types, which only exist after a dev server or build has run. Stale `.next/types` from an old build break `tsc`.

@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { Menu } from "@/components/menu";
 import { ProductCard } from "@/components/product-card";
 import { colourSwatch, filterProducts, priceBands, sorts, type Filters } from "@/lib/listing";
 import type { Product } from "@/lib/products";
@@ -130,7 +131,7 @@ export function ProductListing({
           </p>
 
           <div className="flex items-center gap-8">
-            <details className="group sm:relative">
+            <Menu className="group sm:relative">
               <summary className="label cursor-pointer list-none [&::-webkit-details-marker]:hidden">
                 Filter{active.length > 0 && ` (${active.length})`}
                 <span aria-hidden className="ml-2 inline-block transition-transform group-open:rotate-45">+</span>
@@ -186,10 +187,10 @@ export function ProductListing({
                   </Link>
                 )}
               </div>
-            </details>
+            </Menu>
 
             {/* key remounts the menu closed after each choice */}
-            <details key={activeSort.slug} className="group sm:relative">
+            <Menu key={activeSort.slug} className="group sm:relative">
               <summary className="label cursor-pointer list-none [&::-webkit-details-marker]:hidden">
                 <span className="hidden sm:inline">Sort: </span>
                 {activeSort.label}
@@ -208,7 +209,7 @@ export function ProductListing({
                   </li>
                 ))}
               </ul>
-            </details>
+            </Menu>
           </div>
         </div>
       </div>
