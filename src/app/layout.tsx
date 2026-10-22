@@ -4,6 +4,7 @@ import Link from "next/link";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
 import { BagLink } from "@/components/bag-link";
+import { InlineScript } from "@/components/inline-script";
 import { MarketSelector } from "@/components/market-selector";
 import { Menu } from "@/components/menu";
 import { ThemeToggle, themeScript } from "@/components/theme-toggle";
@@ -103,10 +104,11 @@ function Footer() {
         ))}
       </div>
       <div className="container-page rule flex flex-col gap-2 py-6 text-label text-muted uppercase sm:flex-row sm:justify-between">
-        <p className="flex flex-wrap gap-x-6 gap-y-2">
-          <span>© {new Date().getFullYear()} Maison</span>
+        {/* A div, not a p: the selector's <dialog> holds headings and a list, which a paragraph can't contain. */}
+        <div className="flex flex-wrap gap-x-6 gap-y-2">
+          <p>© {new Date().getFullYear()} Maison</p>
           <MarketSelector />
-        </p>
+        </div>
         <p>Imagery courtesy of Unsplash</p>
       </div>
     </footer>
@@ -121,10 +123,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       suppressHydrationWarning // themeScript may set data-theme before React hydrates
     >
       <head>
-        {/* The pattern from Next's "Preventing flash before hydration" guide. In development React logs
-            "Encountered a script tag…" when this layout re-renders on the client (router.refresh, 404s);
-            that warning is dev-only and harmless: the script already ran during HTML parsing. */}
-        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        {/* Next's "Preventing flash before hydration" pattern: sets data-theme before first paint. */}
+        <InlineScript html={themeScript} />
       </head>
       <body className="min-h-full flex flex-col">
         <Header />
