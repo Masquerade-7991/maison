@@ -228,6 +228,37 @@ export const cartItemsRelations = relations(cartItems, ({ one }) => ({
   product: one(products, { fields: [cartItems.productId], references: [products.id] }),
 }));
 
+// "Notify me when it's back": one row per customer and product (signed-in customers only, so the address
+// is verified). notifiedAt is set by the same statement that picks the rows to email (src/lib/alerts.ts),
+// so a restock emails each person once; asking again on a later sell-out clears it.
+export const stockAlerts = pgTable(
+  "stock_alerts",
+  {
+    userId: text().notNull().references(() => user.id, { onDelete: "cascade" }),
+    productId: uuid().notNull().references(() => products.id, { onDelete: "cascade" }),
+    market: text().notNull().default("us"), // the market they asked from: the alert's price is shown in it
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    notifiedAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.productId] }), index("stock_alerts_waiting_idx").on(t.productId).where(sql`${t.notifiedAt} is null`)],
+);
+
+// Every email the shop tried to send (src/lib/email.ts): what, to whom, about what, and how it went.
+// "logged" means email was off or the address is a test one, so it only reached the server log.
+export const emailLog = pgTable(
+  "email_log",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    kind: text().notNull(), // e.g. order.confirmed, account.verify, stock.back
+    recipient: text().notNull(),
+    ref: text(), // an order id, product id or user id, for finding and resending
+    status: text().notNull(), // sent | failed | logged
+    error: text(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("email_log_ref_idx").on(t.ref, t.createdAt.desc())],
+);
+
 // ─── Orders ──────────────────────────────────────────────────────────────────
 // Created "pending" when checkout starts (prices and items snapshotted from our DB), then moved
 // forward only by Stripe-verified events via applyCheckoutSession in src/lib/orders.ts.

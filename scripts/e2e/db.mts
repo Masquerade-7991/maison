@@ -4,7 +4,7 @@
 import "dotenv/config";
 import { and, desc, eq, inArray, like, sql } from "drizzle-orm";
 const { db } = await import("../../src/db");
-const { orderItems, orders, products, user, verification } = await import("../../src/db/schema");
+const { emailLog, orderItems, orders, products, user, verification } = await import("../../src/db/schema");
 const { stripe } = await import("../../src/lib/stripe");
 
 const [cmd, ...args] = process.argv.slice(2);
@@ -58,6 +58,7 @@ switch (cmd) {
       if (list.length) await db.delete(orders).where(inArray(orders.id, list.map((o) => o.id)));
       await db.delete(verification).where(eq(verification.value, u.id)); // unused reset tokens
       await db.delete(user).where(eq(user.id, u.id));
+      await db.delete(emailLog).where(eq(emailLog.recipient, email)); // its email records
       console.log(`${email}: ${list.length} orders removed, account deleted`);
     }
     break;
@@ -101,6 +102,13 @@ switch (cmd) {
     console.log(rows[0]?.identifier.slice("reset-password:".length) ?? "none");
     break;
   }
+  case "emails": {
+    // The emails recorded for a test account, oldest first: [{ kind, status }].
+    if (!args[0]?.startsWith("qa.")) throw new Error("emails: test accounts only");
+    const rows = await db.select({ kind: emailLog.kind, status: emailLog.status }).from(emailLog).where(eq(emailLog.recipient, args[0])).orderBy(emailLog.createdAt);
+    console.log(JSON.stringify(rows));
+    break;
+  }
   case "cleanup:stale": {
     // Test accounts left behind by an interrupted run.
     const stale = await db.select({ email: user.email }).from(user).where(and(like(user.email, "qa.%"), like(user.email, "%@example.com")));
@@ -108,6 +116,6 @@ switch (cmd) {
     break;
   }
   default:
-    console.log("commands: stock:get <slug> | stock:set <slug> <n> | product:get <slug> | product:delete <qa-slug> | products:count <name prefix> | user:get <email> | order:get <id> | orders <email> | cleanup <email…> | cleanup:stale");
+    console.log("commands: stock:get <slug> | stock:set <slug> <n> | product:get <slug> | product:delete <qa-slug> | products:count <name prefix> | user:get <email> | order:get <id> | orders <email> | emails <email> | cleanup <email…> | cleanup:stale");
 }
 process.exit(0);

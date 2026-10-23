@@ -3,7 +3,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { FulfilmentForm } from "@/components/admin/fulfilment-form";
 import { OrderDetails } from "@/components/order-details";
+import { emailLogFor } from "@/lib/admin-emails";
 import { getAdminOrder } from "@/lib/admin-orders";
+import { resendEmailAction } from "../actions";
 import { isUuid } from "@/lib/admin-rules";
 import { formatMoney } from "@/lib/format";
 import { marketById, toUsdCents } from "@/lib/markets";
@@ -21,6 +23,11 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
   if (!order) notFound();
   const paid = order.status === "paid";
   const refund = refundLabel(order.refundedCents, order.amountTotalCents ?? order.subtotalCents, (c) => formatMoney(c, order.currency));
+  const log = await emailLogFor(order.id);
+  // The order emails that match where the order is now, so a resend never tells the customer something untrue.
+  const resendable = paid
+    ? (["confirmed", order.fulfilmentStatus === "unfulfilled" ? null : order.fulfilmentStatus, order.refundedCents > 0 ? "refunded" : null].filter(Boolean) as string[])
+    : [];
 
   return (
     <>
@@ -79,6 +86,36 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
       <div className="mt-12">
         <OrderDetails order={order} />
       </div>
+
+      <section className="mt-12">
+        <h3 className="label border-b border-line pb-3">Emails to the customer</h3>
+        {log.length === 0 ? (
+          <p className="mt-4 text-muted">None recorded yet.</p>
+        ) : (
+          <ul className="mt-2">
+            {log.map((e) => (
+              <li key={e.id} className="flex flex-wrap justify-between gap-x-6 gap-y-1 border-b border-line py-3">
+                <span>{e.kind.replace(/^order\./, "").replace("_", " ")}</span>
+                <span className="text-muted">
+                  {e.status === "sent" ? "Sent" : e.status === "logged" ? "Logged only (email off or test address)" : `Failed: ${e.error ?? "unknown error"}`} ·{" "}
+                  {date.format(e.createdAt)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {resendable.length > 0 && (
+          <form action={resendEmailAction} className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3">
+            <input type="hidden" name="id" value={order.id} />
+            <span className="label text-muted">Resend</span>
+            {resendable.map((k) => (
+              <button key={k} type="submit" name="kind" value={k} className="label link cursor-pointer">
+                {k}
+              </button>
+            ))}
+          </form>
+        )}
+      </section>
     </>
   );
 }

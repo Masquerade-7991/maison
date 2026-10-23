@@ -35,6 +35,7 @@ export function AuthForm({ mode, next }: { mode: AuthMode; next: string }) {
   const [pending, setPending] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [sentTo, setSentTo] = useState<string | null>(null);
+  const [resent, setResent] = useState<"idle" | "sending" | "sent">("idle");
   // Development only (no email provider): the verification link, shown on the page instead of emailed.
   const [devLink, setDevLink] = useState<string | null>(null);
 
@@ -120,7 +121,7 @@ export function AuthForm({ mode, next }: { mode: AuthMode; next: string }) {
         <p className="label text-muted">Test site</p>
         <p className="mt-3 text-display-sm">Verify your email</p>
         <p className="mt-3">
-          Email sending is switched off, so here&apos;s the link for <span className="font-medium">{sentTo}</span>.
+          We don&apos;t send email to this address here, so this is the link for <span className="font-medium">{sentTo}</span>.
         </p>
         <a href={devLink} className="btn btn-primary mt-8 sm:w-full">Verify email and continue</a>
         <p className="mt-4 text-muted">It expires in an hour.</p>
@@ -150,6 +151,27 @@ export function AuthForm({ mode, next }: { mode: AuthMode; next: string }) {
           </button>
           .
         </p>
+        <p className="mt-4" aria-live="polite">
+          {resent === "sent" ? (
+            <span className="text-muted">A new link is on its way.</span>
+          ) : (
+            <button
+              type="button"
+              disabled={resent === "sending"}
+              className="label link cursor-pointer disabled:cursor-wait"
+              onClick={async () => {
+                setResent("sending");
+                // Better Auth's own endpoint, so its rate limit applies; the reply is the same for any address.
+                const { error } = await authClient.sendVerificationEmail({ email: sentTo, callbackURL: `${window.location.origin}/sign-in?next=${encodeURIComponent(next)}` });
+                setResent(error ? "idle" : "sent");
+                if (error) setFormError(error.status === 429 ? "Too many attempts. Please wait a minute and try again." : "We couldn't resend the link. Please try again.");
+              }}
+            >
+              {resent === "sending" ? "Sending…" : "Resend link"}
+            </button>
+          )}
+        </p>
+        {formError && <p role="alert" className="mt-3 text-danger">{formError}</p>}
       </div>
     );
   }

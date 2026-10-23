@@ -69,7 +69,7 @@ export async function updateFulfilment(id: string, action: FulfilmentAction, tra
     .where(and(eq(orders.id, id), eq(orders.status, "paid"), eq(orders.fulfilmentStatus, FROM[action])))
     .returning({ id: orders.id });
   if (!row) return current(id);
-  if (next === "shipped" || next === "cancelled") await notifyCustomer(id, next);
+  if (next !== "unfulfilled") await notifyCustomer(id, next); // shipped, delivered or cancelled: each in the order's email thread
   return { ok: true } as FulfilmentResult;
 }
 

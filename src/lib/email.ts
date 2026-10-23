@@ -1,27 +1,71 @@
-// Transactional email through Resend's HTTP API (plain fetch, no SDK).
+// Transactional email over SMTP from the shop's own mailbox (a Gmail account with an app password): no
+// email service to sign up for. SMTP_URL holds the connection, e.g.
+//   smtps://maison.shop%40gmail.com:APP_PASSWORD@smtp.gmail.com:465
+// and EMAIL_FROM the sender, e.g. "Maison <maison.shop@gmail.com>". Replies go to CONTACT_TO when set.
 //
-// Email is "off" when RESEND_API_KEY / EMAIL_FROM are missing, in development or on a deployment with
-// EMAIL_LINKS_ON_PAGE=true (the internal test site). Nothing is sent: the message is printed to the
-// server log, and the sign-up page shows the verification link itself (src/lib/dev-email-actions.ts).
-// Anywhere else a missing key throws. Never set EMAIL_LINKS_ON_PAGE on a real launch: it lets anyone
-// verify an address they don't own.
+// Email is "off" (the message is printed to the server log, nothing is sent) when EMAIL_OFF=true (the e2e
+// server), or when SMTP_URL is missing in development or on a deployment with EMAIL_LINKS_ON_PAGE=true
+// (the sign-up page then shows the verification link itself, src/lib/dev-email-actions.ts). Test addresses
+// (example.com) are never mailed. Every attempt is recorded in email_log. sendEmail never throws: an email
+// must not fail a payment webhook or an admin save that has already happened.
+import nodemailer, { type Transporter } from "nodemailer";
+import { db } from "@/db";
+import { emailLog } from "@/db/schema";
+import { isSuppressed } from "@/lib/emails/rules";
 
 export const emailIsOff = () =>
-  (process.env.NODE_ENV !== "production" || process.env.EMAIL_LINKS_ON_PAGE === "true") &&
-  !(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
+  process.env.EMAIL_OFF === "true" ||
+  (!process.env.SMTP_URL && (process.env.NODE_ENV !== "production" || process.env.EMAIL_LINKS_ON_PAGE === "true"));
 
-export async function sendEmail({ to, subject, text }: { to: string; subject: string; text: string }) {
-  if (emailIsOff()) {
-    console.info(`[email] to ${to} | ${subject}\n${text}`);
-    return;
+let transport: Transporter | null = null;
+const smtp = () => (transport ??= nodemailer.createTransport(process.env.SMTP_URL!));
+
+export type OutgoingEmail = {
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+  /** What it is (order.shipped, account.verify…) and what it's about (an order, product or user id). */
+  kind: string;
+  ref?: string;
+  headers?: Record<string, string>;
+  /** Defaults to CONTACT_TO, so customers' replies reach client services. */
+  replyTo?: string;
+};
+
+export type SendResult = "sent" | "failed" | "logged";
+
+export async function sendEmail(mail: OutgoingEmail): Promise<SendResult> {
+  let status: SendResult;
+  let error: string | null = null;
+  if (emailIsOff() || isSuppressed(mail.to)) {
+    console.info(`[email] ${mail.kind} to ${mail.to} | ${mail.subject}\n${mail.text}`);
+    status = "logged";
+  } else {
+    try {
+      if (!process.env.SMTP_URL || !process.env.EMAIL_FROM) throw new Error("SMTP_URL and EMAIL_FROM must be set to send email.");
+      await smtp().sendMail({
+        from: process.env.EMAIL_FROM,
+        replyTo: mail.replyTo ?? (process.env.CONTACT_TO || undefined),
+        to: mail.to,
+        subject: mail.subject,
+        html: mail.html,
+        text: mail.text,
+        headers: mail.headers,
+      });
+      status = "sent";
+    } catch (e) {
+      status = "failed";
+      error = e instanceof Error ? e.message : String(e);
+      console.error(`[email] ${mail.kind} to ${mail.to} failed:`, e);
+    }
   }
-  const key = process.env.RESEND_API_KEY;
-  const from = process.env.EMAIL_FROM;
-  if (!key || !from) throw new Error("RESEND_API_KEY and EMAIL_FROM must be set to send email.");
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from, to, subject, text }),
-  });
-  if (!res.ok) throw new Error(`Resend responded ${res.status}: ${await res.text()}`);
+  await db
+    .insert(emailLog)
+    .values({ kind: mail.kind, recipient: mail.to, ref: mail.ref ?? null, status, error })
+    .catch((e) => console.error("[email] could not record the email:", e));
+  return status;
 }
+
+/** The site's absolute origin, for links in emails. */
+export const siteUrl = () => (process.env.BETTER_AUTH_URL ?? "http://localhost:3000").replace(/\/$/, "");

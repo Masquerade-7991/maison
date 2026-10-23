@@ -21,7 +21,8 @@
     "e2e:customer-flow": "node scripts/e2e/customer-flow.e2e.mjs",
     "e2e:password-reset": "node scripts/e2e/password-reset.e2e.mjs",
     "e2e:contact": "node scripts/e2e/contact.e2e.mjs",
-    "e2e:markets": "node scripts/e2e/markets.e2e.mjs"
+    "e2e:markets": "node scripts/e2e/markets.e2e.mjs",
+    "e2e:alerts": "node scripts/e2e/alerts.e2e.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
@@ -29,6 +30,7 @@
     "drizzle-orm": "^0.45.3",
     "geist": "^1.8.1",
     "next": "16.3.6",
+    "nodemailer": "^10.2.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "stripe": "^22.6.2"
@@ -36,6 +38,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/nodemailer": "^8.0.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "dotenv": "^18.0.4",

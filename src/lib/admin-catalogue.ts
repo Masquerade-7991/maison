@@ -2,9 +2,11 @@
 // storefront's read-only view. Every exported function checks the role itself rather than trusting
 // its caller (enforced by src/app/admin/admin-guard.check.mjs).
 import { and, asc, count, desc, eq, ilike, sql, type SQL } from "drizzle-orm";
+import { after } from "next/server";
 import { db } from "@/db";
 import { categories, productImages, products } from "@/db/schema";
 import type { CategoryErrors, CategoryInput, FieldErrors, ProductInput } from "@/lib/admin-rules";
+import { sendBackInStock } from "@/lib/alerts";
 import { assertAdmin } from "@/lib/session";
 
 // ponytail: unpaginated, like listUsers; add limit/offset once the catalogue passes a few hundred products.
@@ -116,7 +118,10 @@ export async function updateProduct(id: string, input: Omit<ProductInput, "slug"
     select slug from p
   `);
   const slug = result.rows[0]?.slug;
-  if (slug) return { ok: true, id, slug };
+  if (slug) {
+    after(() => sendBackInStock(id)); // after the response: the save never waits on email
+    return { ok: true, id, slug };
+  }
 
   const [now] = await db.select({ stock: products.stockQuantity }).from(products).where(eq(products.id, id));
   if (!now) return { ok: false, error: "This product no longer exists." };
@@ -140,7 +145,10 @@ export async function updateStock(id: string, expected: number, next: number): P
     .set({ stockQuantity: next })
     .where(and(eq(products.id, id), eq(products.stockQuantity, expected)))
     .returning({ stock: products.stockQuantity });
-  if (row) return { ok: true, stock: row.stock };
+  if (row) {
+    if (expected <= 0 && row.stock > 0) after(() => sendBackInStock(id)); // back from sold out
+    return { ok: true, stock: row.stock };
+  }
 
   const [now] = await db.select({ stock: products.stockQuantity }).from(products).where(eq(products.id, id));
   if (!now) return { ok: false, error: "This product no longer exists." };

@@ -9,6 +9,7 @@ const sections = [
   { href: "/admin/categories", label: "Categories" },
   { href: "/admin/orders", label: "Orders" },
   { href: "/admin/accounts", label: "Accounts" },
+  { href: "/admin/emails", label: "Emails" },
 ];
 
 export function AdminNav() {

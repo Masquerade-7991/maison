@@ -4,7 +4,8 @@ import { createAuthMiddleware } from "better-auth/api";
 import { and, eq, lt } from "drizzle-orm";
 import { db } from "@/db";
 import { user } from "@/db/schema";
-import { sendEmail } from "@/lib/email";
+import { sendEmail, siteUrl } from "@/lib/email";
+import { passwordChangedEmail, resetPasswordEmail, verifyEmail, welcomeEmail } from "@/lib/emails/templates";
 
 const VERIFY_LINK_TTL = 60 * 60; // seconds
 const RESET_LINK_TTL = 60 * 60; // seconds
@@ -30,24 +31,25 @@ export const auth = betterAuth({
     // or anyone could reset any account, admins included.
     resetPasswordTokenExpiresIn: RESET_LINK_TTL,
     revokeSessionsOnPasswordReset: true,
-    sendResetPassword: ({ user, url }) =>
-      sendEmail({
-        to: user.email,
-        subject: "Reset your Maison password",
-        text: `Choose a new password for your Maison account with this link. It works once and expires in an hour:\n\n${url}\n\nIf you didn't ask for this, ignore this email: your password stays the same.`,
-      }),
+    sendResetPassword: async ({ user, url }) => {
+      await sendEmail({ ...resetPasswordEmail(siteUrl(), user.name, url), to: user.email, kind: "account.reset_password", ref: user.id });
+    },
+    // A security notice after every successful reset ("wasn't you? reset and write to us").
+    onPasswordReset: async ({ user }) => {
+      await sendEmail({ ...passwordChangedEmail(siteUrl(), user.name), to: user.email, kind: "account.password_changed", ref: user.id });
+    },
   },
   emailVerification: {
     sendOnSignUp: true,
     sendOnSignIn: true, // an unverified sign-in attempt re-sends the link
     autoSignInAfterVerification: true,
     expiresIn: VERIFY_LINK_TTL,
-    sendVerificationEmail: ({ user, url }) =>
-      sendEmail({
-        to: user.email,
-        subject: "Verify your email for Maison",
-        text: `Confirm your Maison account by opening this link within an hour:\n\n${url}`,
-      }),
+    sendVerificationEmail: async ({ user, url }) => {
+      await sendEmail({ ...verifyEmail(siteUrl(), user.name, url), to: user.email, kind: "account.verify", ref: user.id });
+    },
+    afterEmailVerification: async (user) => {
+      await sendEmail({ ...welcomeEmail(siteUrl(), user.name), to: user.email, kind: "account.welcome", ref: user.id });
+    },
   },
   // Production only (Better Auth's default): in dev every request comes from localhost with no client IP,
   // so all of them would share one bucket, and dev runs against the live database table.

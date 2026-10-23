@@ -64,6 +64,13 @@
       "when": 1792700046323,
       "tag": "0008_right_terror",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792790592470,
+      "tag": "0009_absurd_shockwave",
+      "breakpoints": true
     }
   ]
 }

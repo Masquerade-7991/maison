@@ -7,8 +7,8 @@ import type Stripe from "stripe";
 import { db } from "@/db";
 import { orderItems, orders, productImages, user } from "@/db/schema";
 import type { Bag } from "@/lib/cart-rules";
-import { sendEmail } from "@/lib/email";
-import { orderEmail, type OrderEmail } from "@/lib/order-emails";
+import { sendEmail, siteUrl } from "@/lib/email";
+import { newOrderAdminEmail, orderEmail, type OrderEmailKind } from "@/lib/emails/templates";
 import { nextStatus, type CheckoutEvent, type OrderStatus } from "@/lib/order-rules";
 
 /** Snapshot the bag into a pending order. The caller has already checked the bag has no stock issues. */
@@ -145,7 +145,10 @@ export async function applyCheckoutSession(
   }
   // Only the call whose guarded UPDATE moved the order gets here, so the confirmation goes at most once
   // (notifyCustomer never throws; a process killed right here would lose it, the order is still correct).
-  if (paid) await notifyCustomer(orderId, "confirmed");
+  if (paid) {
+    await notifyCustomer(orderId, "confirmed");
+    await notifyShop(orderId);
+  } else if (next === "processing" || next === "payment_failed") await notifyCustomer(orderId, next);
   return refreshStock({ orderId, status: next, changed: true });
 }
 
@@ -224,9 +227,9 @@ export async function getOrder(orderId: string) {
 }
 
 async function loadOrder(where: SQL) {
-  const [row] = await db.select({ order: orders, accountEmail: user.email }).from(orders).innerJoin(user, eq(user.id, orders.userId)).where(where).limit(1);
+  const [row] = await db.select({ order: orders, accountEmail: user.email, accountName: user.name }).from(orders).innerJoin(user, eq(user.id, orders.userId)).where(where).limit(1);
   if (!row) return null;
-  const { order, accountEmail } = row;
+  const { order, accountEmail, accountName } = row;
   const orderId = order.id;
   // The packshot is looked up live (not part of the snapshot); a product deleted since just shows no image.
   const rows = await db
@@ -235,7 +238,7 @@ async function loadOrder(where: SQL) {
     .leftJoin(productImages, and(eq(productImages.productId, orderItems.productId), eq(productImages.position, 0)))
     .where(eq(orderItems.orderId, orderId))
     .orderBy(asc(orderItems.name));
-  return { ...order, accountEmail, items: rows.map((r) => ({ ...r.item, imageUrl: r.imageUrl, imageAlt: r.imageAlt ?? r.item.name })) };
+  return { ...order, accountEmail, accountName, items: rows.map((r) => ({ ...r.item, imageUrl: r.imageUrl, imageAlt: r.imageAlt ?? r.item.name })) };
 }
 
 /**
@@ -243,11 +246,25 @@ async function loadOrder(where: SQL) {
  * returned a row, so each email goes once. Never throws: a mail failure must not fail the webhook
  * (Stripe would retry) or an admin action that has already been saved.
  */
-export async function notifyCustomer(orderId: string, kind: OrderEmail) {
+export async function notifyCustomer(orderId: string, kind: OrderEmailKind, resend = false) {
   try {
     const order = await getOrder(orderId);
-    if (order) await sendEmail(orderEmail(order, kind));
+    if (!order) return;
+    const mail = orderEmail(siteUrl(), order, kind, order.accountName, resend);
+    await sendEmail({ ...mail, to: order.customerEmail ?? order.accountEmail, kind: `order.${kind}`, ref: order.id });
   } catch (e) {
     console.error(`[order email] ${kind} for ${orderId} failed:`, e);
+  }
+}
+
+/** The business inbox hears about every paid order (flagged when it oversold). Skipped without CONTACT_TO. */
+async function notifyShop(orderId: string) {
+  const to = process.env.CONTACT_TO;
+  if (!to) return;
+  try {
+    const order = await getOrder(orderId);
+    if (order) await sendEmail({ ...newOrderAdminEmail(siteUrl(), order), to, kind: "admin.new_order", ref: order.id });
+  } catch (e) {
+    console.error(`[order email] admin alert for ${orderId} failed:`, e);
   }
 }

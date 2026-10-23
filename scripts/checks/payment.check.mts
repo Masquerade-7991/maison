@@ -29,7 +29,7 @@ const orderIds: string[] = [];
 // Count confirmation emails (email is off here, so sendEmail logs "[email] …" instead of sending).
 let emails = 0;
 const log = console.info;
-console.info = (...args: unknown[]) => void (String(args[0]).startsWith("[email]") && emails++);
+console.info = (...args: unknown[]) => void (String(args[0]).startsWith("[email] order.confirmed") && emails++);
 
 async function newOrder(p: typeof a, quantity: number) {
   const id = crypto.randomUUID();

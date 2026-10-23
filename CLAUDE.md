@@ -22,7 +22,7 @@ npm run auth:set-role -- <email> <customer|admin>
 
 pnpm only: `pnpm add`, never `npm install` (`packageManager` pins pnpm). pnpm refuses to run anything unless `allowBuilds` in `pnpm-workspace.yaml` holds real `true`/`false` values. `npm run <script>` still works.
 
-Env lives in `.env` (from `.env.example`). You can't read or write `.env` (permissions), so the user pastes secrets. `BETTER_AUTH_URL` must be the app's exact origin or verification links break. Stripe needs a restricted `rk_` key with *Checkout Sessions: write*; locally the webhook secret comes from `stripe listen --events checkout.session.completed,checkout.session.async_payment_succeeded,checkout.session.async_payment_failed,checkout.session.expired,charge.refunded --forward-to localhost:3000/api/stripe/webhook` (current CLIs refuse to start without `--events`; the secret is stable per machine, see `stripe listen --print-secret`). The storefront builds and runs without Stripe or Resend keys; only checkout, the webhook and email need them. `CONTACT_TO` is the business inbox the contact form mails (optional; unset means the server log).
+Env lives in `.env` (from `.env.example`). You can't read or write `.env` (permissions), so the user pastes secrets. `BETTER_AUTH_URL` must be the app's exact origin or verification links break. Stripe needs a restricted `rk_` key with *Checkout Sessions: write*; locally the webhook secret comes from `stripe listen --events checkout.session.completed,checkout.session.async_payment_succeeded,checkout.session.async_payment_failed,checkout.session.expired,charge.refunded --forward-to localhost:3000/api/stripe/webhook` (current CLIs refuse to start without `--events`; the secret is stable per machine, see `stripe listen --print-secret`). The storefront builds and runs without Stripe or email settings; only checkout, the webhook and email need them. Email is SMTP from the shop's own Gmail: `SMTP_URL` (`smtps://<address, @ as %40>:<app password>@smtp.gmail.com:465`) and `EMAIL_FROM` (`Maison <address>`). `CONTACT_TO` is the business inbox: contact messages, new-order alerts and the Reply-To on customer emails (optional; unset means the server log).
 
 ## Verification
 
@@ -30,7 +30,7 @@ There is no test runner.
 
 - `npm run check`: the pure rules, run by Node 23+ (which strips TS types). That's why pure modules import each other as `./x.ts` and `tsconfig.json` sets `allowImportingTsExtensions`.
 - `npm run check:payment` and `npm run e2e:checkout | e2e:customer-flow | e2e:password-reset | e2e:contact | e2e:admin-stock | e2e:admin-flow` work on the shared production database and clean up after themselves. Test accounts are always `qa.…@example.com` and test products `qa-…`.
-- The e2e runs drive an installed Edge through `playwright-core` (`BROWSER_CHANNEL=chrome` for Chrome) against `npm run build` then `EMAIL_LINKS_ON_PAGE=true BETTER_AUTH_URL=http://localhost:3100 npx next start -p 3100`. Set `BASE=<url>` to target another server, such as the live site. Production mode allows 3 sign ups a minute, so leave a minute between runs. `e2e:customer-flow` needs `chain-shoulder-bag` to have 2 to 9 in stock.
+- The e2e runs drive an installed Edge through `playwright-core` (`BROWSER_CHANNEL=chrome` for Chrome) against `npm run build` then `EMAIL_OFF=true EMAIL_LINKS_ON_PAGE=true BETTER_AUTH_URL=http://localhost:3100 npx next start -p 3100` (`EMAIL_OFF` keeps a local `SMTP_URL` from sending). Set `BASE=<url>` to target another server, such as the live site. Production mode allows 3 sign ups a minute, so leave a minute between runs. `e2e:customer-flow` needs `chain-shoulder-bag` to have 2 to 9 in stock.
 - After an interrupted run: `npx tsx scripts/e2e/db.mts cleanup:stale` lists leftover test accounts, and `cleanup <email…>` removes them and puts their paid stock back.
 
 ## Architecture
@@ -59,7 +59,7 @@ Next.js 16 App Router, React 19, Tailwind v4 (PostCSS plugin only, no `tailwind.
 - Pages never touch `db` directly; they call `src/lib/products.ts`. Listing filters run in memory over one view: a deliberate ceiling, move them into SQL once a view holds a few hundred products.
 - Categories are product types; department (`women`/`men`/`unisex`) is an enum and `isGift` a flag.
 - Admin image URLs must be on `images.unsplash.com`, the only host `next.config.ts` allows. `next/image` uses a custom loader (`src/lib/image-loader.ts`) that asks Unsplash's own CDN for the size and format, so images skip Vercel's optimizer.
-- "Notify me when it is available" on sold out product pages is a placeholder: it stores and sends nothing, and says so. Real alerts would need a table and an email when stock goes up from 0.
+- "Notify me when it's back" on sold-out product pages is for signed-in customers (`src/components/stock-alert.tsx`, `stockAlertAction`, the `stock_alerts` table). `src/lib/alerts.ts` owns that table: after every admin product or stock save, `sendBackInStock()` runs in `after()` and, if the product is buyable, claims the waiting alerts (sets `notified_at`) in the same statement that reads them, so each request is emailed once. Each email carries a signed one-click stop link (`/api/alerts/stop`). A stock change made outside the admin (the test helper, SQL) sends nothing.
 
 ### Contact and About
 
@@ -74,7 +74,7 @@ Only the home page, product pages and story pages are static, per market (ISR, `
 ### Auth and access
 
 - Sign in, sign up and sign out run from client components through `auth-client` and `/api/auth/[...all]`, **not** Server Actions calling `auth.api.*`: Better Auth's rate limiting only runs in its HTTP router. Rate limits are stored in Postgres and apply in production only.
-- Email verification is required. Email is "off" when the Resend keys are missing **and** the app is in development or has `EMAIL_LINKS_ON_PAGE=true`: emails only go to the server log, the verification link shows on the page (so anyone can verify any unverified address), and the pages stop promising receipts. In production without that switch, a missing key throws. Never set it for a real launch.
+- Email verification is required. Email is "off" when `EMAIL_OFF=true`, or `SMTP_URL` is missing **and** the app is in development or has `EMAIL_LINKS_ON_PAGE=true`: emails only go to the server log, the verification link shows on the page (so anyone can verify any unverified address; with email on it still shows for `example.com` test addresses only, which are never mailed), and the pages stop promising receipts. In production without that switch, a missing key throws. Never set it for a real launch.
 - **Password reset links are never shown on a page**, not even with `EMAIL_LINKS_ON_PAGE`: that would let anyone reset any account, admins included. While email is off they only reach the server log. A reset link works once, expires in an hour, and saving the new password signs the account out everywhere; the forgot password reply is the same whether or not the account exists.
 - Server code reads the session only through `src/lib/session.ts`. Every protected page calls `requireUser`/`requireAdmin`, and every admin Server Action and admin data function (`src/lib/admin-*.ts`, `src/lib/users.ts`) starts with `await assertAdmin()`. Never rely on a layout for access: layouts don't render again on client navigation. `src/app/admin/admin-guard.check.mjs` enforces this. Customers get a plain 404 from admin routes.
 - `src/proxy.ts` matches everything except `/api/**`, `/_next/**` and files with an extension. Keep `/api/**` out of it: Stripe sends no cookie.
@@ -99,6 +99,14 @@ Stripe hosted Checkout Sessions, test mode account "Maison sandbox".
 - Fulfilment (`unfulfilled → shipped → delivered`, or `cancelled`) is separate from payment status, admin only, and only for paid orders. Order emails go only after the guarded update wins, and sending never throws.
 - **Refunds are issued in the Stripe Dashboard, never in the app** (the key stays Checkout only), and recorded from the `charge.refunded` webhook. Known gaps: a refund that later fails still counts, and nothing restocks automatically.
 
+### Email
+
+Every email is built in `src/lib/emails/`: `layout.ts` is the one frame (inline-styled tables in the site's light tokens and fallback font stack, plus the plain-text part from the same blocks), `templates.ts` builds each email from data, and `rules.ts` holds the pure rules (`rules.check.mjs`). New emails must use `renderEmail()` blocks, never their own HTML. `src/lib/email.ts` sends over SMTP with Nodemailer, records every attempt in `email_log` (`sent`, `failed`, or `logged` when email is off or the address is a test one), and never throws. `example.com` addresses (`isSuppressed`) are never mailed, so the e2e accounts can't bounce and get the Gmail flagged; Gmail allows about 500 emails a day.
+
+- Customers get: verify, welcome (Better Auth `afterEmailVerification`), reset password, password changed (`onPasswordReset`), order confirmed / payment processing / payment failed (from `applyCheckoutSession`, only when its guarded update wins), shipped / delivered / cancelled (`updateFulfilment`), refunded, back in stock, and a contact-form acknowledgement that repeats only the topic, never the message. `CONTACT_TO` gets each contact message (Reply-To the visitor) and each paid order ("Oversold:" in the subject when it was).
+- **One thread per order:** every order email has the same subject (`orderSubject`) and replies to the confirmation's fixed `Message-ID` (`orderThreadHeaders`); later ones and resends get their own id, because Gmail drops a repeated one.
+- `/admin/emails` previews every template with the latest paid order; the admin order page lists that order's `email_log` and resends an email that matches its current state.
+
 ### Admin writes never overwrite a sale
 
 Every admin stock edit (product form and `/admin/stock`) posts the number it loaded and only applies while stock still equals it; otherwise the admin gets the current number and saves again. An untouched stock field on the product form isn't written at all.
@@ -108,7 +116,7 @@ Every admin stock edit (product form and `/admin/stock`) posts the number it loa
 Vercel project `maison` (team `soumikchoudhury-7216s-projects`), linked to GitHub `Masquerade-7991/maison`; functions run in `cle1` (`vercel.json`), next to Neon's `aws-us-east-2`; every push to `main` deploys to <https://maison-mu-seven.vercel.app>. It shares the Neon `production` branch, so testers' accounts and orders are real rows locally too.
 
 - Production env: `DATABASE_URL` (pooled), its own `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` set to that exact origin (preview and hash URLs fail Better Auth's origin check, so sign in only works on the production domain), `STRIPE_SECRET_KEY` (Maison sandbox `rk_test_`), `STRIPE_WEBHOOK_SECRET` (dashboard endpoint `we_1UKkhb2akEdHkkSyvYfOLKTo`, the same five events, API version pinned to match `src/lib/stripe.ts`), `EMAIL_LINKS_ON_PAGE=true`, `ENABLE_EXPERIMENTAL_COREPACK=1` (pnpm from `packageManager`), `CRON_SECRET` (any long random string; Vercel Cron sends it to `/api/cron/fx`).
-- **Before any real launch:** remove `EMAIL_LINKS_ON_PAGE`, configure Resend, and switch to live Stripe keys.
+- **Before any real launch:** remove `EMAIL_LINKS_ON_PAGE`, move email from Gmail to a mailbox on the shop's own domain (only `SMTP_URL`/`EMAIL_FROM` change), and switch to live Stripe keys.
 - A local `stripe listen` also receives the sandbox's events, so the site and local dev may both apply the same session; the status guard makes that harmless.
 
 ## Next.js 16 notes

@@ -2,9 +2,9 @@
 // playwright-core (no browser download) against a running production build of the app:
 //
 //   npm run build
-//   EMAIL_LINKS_ON_PAGE=true BETTER_AUTH_URL=http://localhost:3100 npx next start -p 3100
+//   EMAIL_OFF=true EMAIL_LINKS_ON_PAGE=true BETTER_AUTH_URL=http://localhost:3100 npx next start -p 3100
 //
-// EMAIL_LINKS_ON_PAGE puts the verification link on the sign-up page, so tests can sign up without email.
+// EMAIL_LINKS_ON_PAGE puts the verification link on the sign-up page, so tests can sign up without email. EMAIL_OFF keeps a local SMTP_URL from sending real mail (test addresses are never mailed anyway).
 // The app's database is the shared Neon `production` branch: every script cleans up what it creates.
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";

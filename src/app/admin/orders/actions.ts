@@ -2,6 +2,7 @@
 
 // Server Actions are public endpoints: the role is checked first, then every field is validated here.
 import { revalidatePath } from "next/cache";
+import { resendOrderEmail } from "@/lib/admin-emails";
 import { updateFulfilment } from "@/lib/admin-orders";
 import { isUuid } from "@/lib/admin-rules";
 import { fulfilmentStatusCopy, orderStatusCopy, type FulfilmentAction } from "@/lib/order-rules";
@@ -48,4 +49,16 @@ export async function fulfilmentAction(_prev: FulfilmentFormState, fd: FormData)
     };
   }
   return { saved: true };
+}
+
+const RESENDABLE = ["confirmed", "shipped", "delivered", "cancelled", "refunded"] as const;
+
+/** Sends one order email again, in the order's thread (e.g. after a customer says it never arrived). */
+export async function resendEmailAction(fd: FormData): Promise<void> {
+  await assertAdmin();
+  const id = typeof fd.get("id") === "string" ? (fd.get("id") as string) : "";
+  const kind = fd.get("kind") as (typeof RESENDABLE)[number];
+  if (!isUuid(id) || !RESENDABLE.includes(kind)) return;
+  await resendOrderEmail(id, kind);
+  revalidatePath(`/admin/orders/${id}`);
 }

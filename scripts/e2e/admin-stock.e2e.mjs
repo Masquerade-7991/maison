@@ -98,17 +98,13 @@ try {
   assert.ok(await customerPage.getByRole("button", { name: "Sold out" }).isDisabled());
   pass("storefront product page shows a disabled 'Sold out' button");
 
-  // The "Notify me" placeholder: shown only when sold out, answers honestly, sends nothing.
-  const posts = [];
-  const onRequest = (r) => r.method() !== "GET" && posts.push(r.url());
-  customerPage.on("request", onRequest);
-  await customerPage.getByRole("button", { name: "Notify me when it is available" }).click();
-  await customerPage.getByText("Back in stock alerts aren't switched on yet").waitFor();
-  await customerPage.waitForTimeout(500);
-  customerPage.off("request", onRequest);
-  assert.deepEqual(posts, [], "the placeholder sends no request");
+  // "Notify me": shown only when sold out; a signed-in customer's request is saved, and Undo removes it.
+  await customerPage.getByRole("button", { name: "Notify me when it's back" }).click();
+  await customerPage.getByText(`We'll email ${CUSTOMER} when it's back.`).waitFor();
+  await customerPage.getByRole("button", { name: "Undo" }).click();
+  await customerPage.getByRole("button", { name: "Notify me when it's back" }).waitFor();
   assert.ok(await customerPage.getByRole("button", { name: "Sold out" }).isDisabled(), "still sold out");
-  pass("sold out: 'Notify me when it is available' shows the placeholder note and sends nothing");
+  pass("sold out: 'Notify me when it's back' saves an alert for the customer, and Undo removes it");
 
   // 5. Bag reflects live stock; checkout blocked, then allowed again
   await customerPage.goto(`${BASE}/bag`);
@@ -120,7 +116,7 @@ try {
   await customerPage.reload();
   assert.ok(await checkout.isEnabled(), "checkout allowed again");
   await customerPage.goto(`${BASE}/products/${SLUG}`);
-  assert.equal(await customerPage.getByRole("button", { name: "Notify me when it is available" }).count(), 0, "no Notify me when buyable");
+  assert.equal(await customerPage.getByRole("button", { name: "Notify me when it's back" }).count(), 0, "no Notify me when buyable");
   await customerPage.goto(`${BASE}/bag`);
   pass("stock back to 5 → checkout allowed again, and 'Notify me' is gone from the product page");
 
