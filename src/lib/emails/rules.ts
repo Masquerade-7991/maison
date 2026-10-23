@@ -12,9 +12,10 @@ export const orderSubject = (reference: string) => `Your Maison order ${referenc
  * included, so a resent confirmation replies to the original instead of reusing its id.
  */
 export function orderThreadHeaders(orderId: string, kind: string, host: string, resend = false, unique = `${Date.now()}`): Record<string, string> {
-  const root = `<order.${orderId}.confirmed@${host}>`;
+  const domain = host.replace(/:\d+$/, ""); // "localhost:3100" isn't a valid Message-ID domain
+  const root = `<order.${orderId}.confirmed@${domain}>`;
   if (kind === "confirmed" && !resend) return { "Message-ID": root };
-  return { "Message-ID": `<order.${orderId}.${kind}.${unique}@${host}>`, "In-Reply-To": root, References: root };
+  return { "Message-ID": `<order.${orderId}.${kind}.${unique}@${domain}>`, "In-Reply-To": root, References: root };
 }
 
 // Public tracking pages that take the number in the URL. Matched loosely on the admin's free-text carrier.
@@ -43,6 +44,16 @@ export function trackingUrl(carrier: string | null | undefined, number: string |
  * domains. Mailing them only bounces, and bounces get a new sending address flagged as spam.
  */
 export const isSuppressed = (address: string) => /@(?:[\w-]+\.)*example\.(?:com|org|net)$/i.test(address.trim());
+
+/**
+ * Worth sending again? Gmail answers a burst from a new mailbox with "421 4.4.5 Server busy, try again
+ * later", and networks drop connections. A wrong password or a refused address (5xx) is final.
+ */
+export function isTransient(e: unknown) {
+  const err = e as { responseCode?: number; code?: string; message?: string };
+  if (err.responseCode) return err.responseCode >= 400 && err.responseCode < 500;
+  return ["ECONNECTION", "ETIMEDOUT", "ESOCKET", "EDNS", "ECONNRESET"].includes(err.code ?? "") || /greeting|try again/i.test(err.message ?? "");
+}
 
 /** The bare address out of `Name <address>` (or the string itself). */
 export const addressOf = (from: string) => from.match(/<([^>]+)>/)?.[1] ?? from.trim();

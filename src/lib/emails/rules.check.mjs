@@ -1,7 +1,7 @@
 // Run: node src/lib/emails/rules.check.mjs  (Node 23+ strips the TS types)
 import assert from "node:assert/strict";
 import { emailImage, esc, renderEmail } from "./layout.ts";
-import { addressOf, isSuppressed, orderSubject, orderThreadHeaders, trackingUrl } from "./rules.ts";
+import { addressOf, isSuppressed, isTransient, orderSubject, orderThreadHeaders, trackingUrl } from "./rules.ts";
 
 // Threading: the confirmation is the root; later emails reply to it with their own unique id.
 const root = orderThreadHeaders("abc", "confirmed", "shop.test");
@@ -30,6 +30,13 @@ assert.ok(!isSuppressed("me@notexample.com"));
 assert.equal(addressOf("Maison <maison.shop@gmail.com>"), "maison.shop@gmail.com");
 assert.equal(addressOf("plain@x.com"), "plain@x.com");
 
+// Retry only temporary failures.
+assert.ok(isTransient({ responseCode: 421, message: "4.4.5 Server busy, try again later" }), "Gmail busy");
+assert.ok(isTransient({ code: "EPROTOCOL", message: "Invalid greeting. response=421-4.4.5 Server busy" }), "busy at greeting");
+assert.ok(isTransient({ code: "ETIMEDOUT" }), "timeout");
+assert.ok(!isTransient({ code: "EAUTH", responseCode: 535, message: "Username and Password not accepted" }), "wrong password is final");
+assert.ok(!isTransient({ responseCode: 550, message: "No such user" }), "refused address is final");
+
 // Rendering: escaped, both parts, preheader hidden, images as JPEG.
 assert.equal(esc(`<b>"Tom's" & co</b>`), "&lt;b&gt;&quot;Tom&#39;s&quot; &amp; co&lt;/b&gt;");
 const e = renderEmail({
@@ -50,8 +57,12 @@ assert.match(e.text, /ORDER CONFIRMED[\s\S]*Thank you, <Ana>[\s\S]*View order: h
 assert.match(emailImage("https://images.unsplash.com/photo-1?ar=4:5&fit=crop&w=1600&auto=format", 72), /w=144.*fm=jpg/);
 assert.ok(!emailImage("https://images.unsplash.com/photo-1?auto=format", 72).includes("auto="));
 
-console.log("email rules checks passed");
 
 // Every style attribute survives intact (a double quote inside one would cut it short).
 for (const m of e.html.matchAll(/style="([^"]*)"/g)) assert.ok(!m[1].includes("&quot;"), "no quotes inside style");
 assert.match(e.html, /font-family:'Helvetica Neue'/, "the font stack reaches the body style");
+// A port isn't valid in a Message-ID (Gmail then ignores it and the thread breaks): it is dropped.
+assert.equal(orderThreadHeaders("abc", "confirmed", "localhost:3100")["Message-ID"], "<order.abc.confirmed@localhost>");
+assert.equal(orderThreadHeaders("abc", "delivered", "localhost:3100", false, "9")["In-Reply-To"], "<order.abc.confirmed@localhost>");
+
+console.log("email rules checks passed");
