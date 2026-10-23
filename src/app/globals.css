@@ -29,6 +29,7 @@
     --muted: #9a9a9a;
     --line: #2a2a2a;
     --accent: #f5f5f5;
+    --danger: #f87171; /* #a4161a is too dark to read on near-black */
   }
 }
 :root[data-theme="dark"] {
@@ -39,6 +40,7 @@
   --muted: #9a9a9a;
   --line: #2a2a2a;
   --accent: #f5f5f5;
+  --danger: #f87171;
 }
 
 /* An inverted panel: the other theme's tokens, so every utility inside (btn-primary, label, text-muted,
@@ -316,6 +318,18 @@
   &:hover {
     background: transparent;
     color: #fff;
+  }
+}
+
+/* Irreversible actions (deleting an account): the one red button. Paper-coloured text reads on the dark red
+   (light theme) and the light red (dark theme). */
+@utility btn-danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--paper);
+  &:hover {
+    background: transparent;
+    color: var(--danger);
   }
 }
 

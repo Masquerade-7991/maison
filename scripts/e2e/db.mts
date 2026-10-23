@@ -109,6 +109,68 @@ switch (cmd) {
     console.log(JSON.stringify(rows));
     break;
   }
+  case "deletion:get": {
+    // The scheduled deletion of a test account: { scheduledFor } or null.
+    const u = await testUser(args[0]);
+    const { accountDeletions } = await import("../../src/db/schema");
+    const [row] = u ? await db.select({ scheduledFor: accountDeletions.scheduledFor }).from(accountDeletions).where(eq(accountDeletions.userId, u.id)) : [];
+    console.log(JSON.stringify(row ?? null));
+    break;
+  }
+  case "deletion:complete": {
+    // Stands in for 14 days passing: back-dates this test account's deletion and runs the nightly purge for it alone.
+    const u = await testUser(args[0]);
+    if (!u) throw new Error("no such test account");
+    const { accountDeletions } = await import("../../src/db/schema");
+    const { purgeDueDeletions } = await import("../../src/lib/account-deletion");
+    await db.update(accountDeletions).set({ scheduledFor: new Date(Date.now() - 60_000) }).where(eq(accountDeletions.userId, u.id));
+    console.info = () => {}; // the goodbye email is only logged for test addresses: keep stdout to the JSON
+    console.log(JSON.stringify(await purgeDueDeletions(new Date(), u.id)));
+    break;
+  }
+  case "order:fake": {
+    // A paid test order in a given fulfilment state (no Stripe), for account deletion checks. Prints its id.
+    const u = await testUser(args[0]);
+    if (!u) throw new Error("no such test account");
+    const [p] = await db.select({ id: products.id, slug: products.slug, name: products.name, price: products.priceCents }).from(products).limit(1);
+    const id = crypto.randomUUID();
+    await db.insert(orders).values({
+        id, userId: u.id, status: "paid", subtotalCents: p.price, amountTotalCents: p.price, paidAt: new Date(),
+        fulfilmentStatus: (args[1] ?? "delivered") as "unfulfilled" | "delivered", customerEmail: args[0],
+        shippingName: "QA Test", shippingAddress: { line1: "1 Market St", city: "San Francisco", country: "US" },
+      });
+    await db.insert(orderItems).values({ orderId: id, productId: p.id, slug: p.slug, name: p.name, size: "", unitPriceCents: p.price, quantity: 1 });
+    console.log(id);
+    break;
+  }
+  case "orders:deliver": {
+    // Marks every order of a test account delivered.
+    const u = await testUser(args[0]);
+    if (u) await db.update(orders).set({ fulfilmentStatus: "delivered", deliveredAt: new Date() }).where(eq(orders.userId, u.id));
+    console.log("ok");
+    break;
+  }
+  case "anonymised:get": {
+    // What an anonymised test account left behind, by user id: the placeholder user and its orders' personal fields.
+    const [u] = await db.select({ name: user.name, email: user.email }).from(user).where(eq(user.id, args[0]));
+    const os = await db.select({ email: orders.customerEmail, name: orders.shippingName, address: orders.shippingAddress }).from(orders).where(eq(orders.userId, args[0]));
+    console.log(JSON.stringify({ user: u ?? null, orders: os }));
+    break;
+  }
+  case "anonymised:remove": {
+    // Cleanup for an anonymised test account (its email is no longer qa.…): only placeholder users.
+    const [u] = await db.select({ email: user.email }).from(user).where(eq(user.id, args[0]));
+    if (!u?.email.endsWith("@deleted.invalid")) throw new Error("not an anonymised account");
+    await db.delete(orders).where(eq(orders.userId, args[0]));
+    await db.delete(user).where(eq(user.id, args[0]));
+    console.log("removed");
+    break;
+  }
+  case "user:id": {
+    const u = await testUser(args[0]);
+    console.log(u?.id ?? "none");
+    break;
+  }
   case "cleanup:stale": {
     // Test accounts left behind by an interrupted run.
     const stale = await db.select({ email: user.email }).from(user).where(and(like(user.email, "qa.%"), like(user.email, "%@example.com")));
@@ -116,6 +178,7 @@ switch (cmd) {
     break;
   }
   default:
-    console.log("commands: stock:get <slug> | stock:set <slug> <n> | product:get <slug> | product:delete <qa-slug> | products:count <name prefix> | user:get <email> | order:get <id> | orders <email> | emails <email> | cleanup <email…> | cleanup:stale");
+    console.log("commands: stock:get <slug> | stock:set <slug> <n> | product:get <slug> | product:delete <qa-slug> | products:count <name prefix> | user:get <email> | order:get <id> | orders <email> | emails <email> | deletion:get <email> | deletion:complete <email> | cleanup <email…> | cleanup:stale");
 }
-process.exit(0);
+// A moment for connections to finish closing: exiting mid-close crashes Node on Windows (UV_HANDLE_CLOSING).
+setTimeout(() => process.exit(0), 100);

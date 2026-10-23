@@ -22,7 +22,8 @@
     "e2e:password-reset": "node scripts/e2e/password-reset.e2e.mjs",
     "e2e:contact": "node scripts/e2e/contact.e2e.mjs",
     "e2e:markets": "node scripts/e2e/markets.e2e.mjs",
-    "e2e:alerts": "node scripts/e2e/alerts.e2e.mjs"
+    "e2e:alerts": "node scripts/e2e/alerts.e2e.mjs",
+    "e2e:account-deletion": "node scripts/e2e/account-deletion.e2e.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

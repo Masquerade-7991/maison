@@ -262,3 +262,56 @@ export function newOrderAdminEmail(site: string, order: OrderForEmail): Email {
     ],
   });
 }
+
+// ── Account deletion ───────────────────────────────────────────────────────────────────────────────────
+
+const longDate = (d: Date) => new Intl.DateTimeFormat("en-GB", { dateStyle: "long", timeZone: "UTC" }).format(d);
+
+export function deletionScheduledEmail(site: string, name: string, scheduledFor: Date): Email {
+  return renderEmail({
+    site,
+    subject: "Your Maison account will be deleted",
+    preheader: `Your account will be deleted on ${longDate(scheduledFor)}. Sign in before then to keep it.`,
+    blocks: [
+      { t: "label", text: "Account deletion" },
+      { t: "title", text: "We're sorry to see you go" },
+      { t: "p", text: `Hello ${firstName(name)}, we've received your request. Your Maison account will be deleted automatically on ${longDate(scheduledFor)}, and you've been signed out on every device.` },
+      { t: "box", heading: "Changed your mind?", lines: [`Sign in before ${longDate(scheduledFor)} and choose "Keep my account". Everything stays as it was.`] },
+      { t: "button", text: "Keep my account", href: `${site}/account` },
+      { t: "p", muted: true, text: "When the account is deleted, your details, bag and alerts are removed. Records of past orders are kept, without your name or email, because we're required to keep them for accounting." },
+      { t: "note", tone: "danger", text: "If you didn't ask for this, sign in now and keep your account, then change your password." },
+    ],
+    reason: "You're receiving this because deletion was requested for this Maison account.",
+  });
+}
+
+export function deletionCancelledEmail(site: string, name: string): Email {
+  return renderEmail({
+    site,
+    subject: "Your Maison account is staying",
+    preheader: "Account deletion cancelled. Everything is as it was.",
+    blocks: [
+      { t: "label", text: "Account deletion" },
+      { t: "title", text: `Welcome back, ${firstName(name)}` },
+      { t: "p", text: "You've cancelled the deletion of your Maison account. Your details, orders and bag are just as you left them." },
+      { t: "button", text: "Go to your account", href: `${site}/account` },
+    ],
+    reason: "You're receiving this because account deletion was cancelled for this address.",
+  });
+}
+
+export function accountDeletedEmail(site: string, name: string): Email {
+  return renderEmail({
+    site,
+    subject: "Your Maison account has been deleted",
+    preheader: "Your account and personal details have been removed.",
+    blocks: [
+      { t: "label", text: "Account deletion" },
+      { t: "title", text: "Your account has been deleted" },
+      { t: "p", text: `Goodbye for now, ${firstName(name)}. As you asked, your Maison account, details, bag and alerts have been removed. Records of past orders are kept without your name or email, as accounting rules require.` },
+      { t: "p", muted: true, text: "This is the last email we'll send to this address. You're always welcome to create a new account." },
+      { t: "link", text: "Visit Maison", href: site },
+    ],
+    reason: "You're receiving this because this Maison account was deleted at your request.",
+  });
+}

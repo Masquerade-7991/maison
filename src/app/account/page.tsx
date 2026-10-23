@@ -1,4 +1,7 @@
 import type { Metadata } from "next";
+import { DeleteAccount } from "@/components/delete-account";
+import { DELETION_DAYS, deletionBlocker, deletionDate, getDeletion } from "@/lib/account-deletion";
+import { cancelDeletionAction } from "@/lib/account-actions";
 import { requireUser } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Account details | Maison" };
@@ -7,6 +10,7 @@ const date = new Intl.DateTimeFormat("en", { dateStyle: "long" });
 
 export default async function AccountDetailsPage() {
   const { user } = await requireUser("/account");
+  const [deletion, blocked] = await Promise.all([getDeletion(user.id), deletionBlocker(user)]);
 
   const rows: { label: string; value: React.ReactNode }[] = [
     { label: "Name", value: user.name },
@@ -25,6 +29,16 @@ export default async function AccountDetailsPage() {
 
   return (
     <>
+      {deletion && (
+        <section role="status" className="mb-10 border border-danger p-6 md:p-8">
+          <p className="label text-danger">Deletion scheduled</p>
+          <p className="mt-3 text-display-sm">Your account will be deleted on {date.format(deletion.scheduledFor)}</p>
+          <p className="mt-3 text-muted">You asked to delete your account on {date.format(deletion.requestedAt)}. Keep it, and everything stays as it was.</p>
+          <form action={cancelDeletionAction} className="mt-6">
+            <button type="submit" className="btn btn-primary sm:w-auto">Keep my account</button>
+          </form>
+        </section>
+      )}
       <h2 className="label">Account details</h2>
       <dl className="mt-4 border-b border-line">
         {rows.map((r) => (
@@ -34,6 +48,7 @@ export default async function AccountDetailsPage() {
           </div>
         ))}
       </dl>
+      {!deletion && <DeleteAccount email={user.email} blocked={blocked} days={DELETION_DAYS} estimate={deletionDate().toISOString()} />}
     </>
   );
 }

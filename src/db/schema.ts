@@ -228,6 +228,17 @@ export const cartItemsRelations = relations(cartItems, ({ one }) => ({
   product: one(products, { fields: [cartItems.productId], references: [products.id] }),
 }));
 
+// Account deletion requests: the account is deleted automatically once scheduledFor has passed
+// (src/lib/account-deletion.ts, daily cron), not at once, so the customer can change their mind by
+// signing in and choosing "Keep my account". One row per user; cancelling deletes it.
+export const accountDeletions = pgTable("account_deletions", {
+  userId: text()
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  requestedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  scheduledFor: timestamp({ withTimezone: true }).notNull(),
+});
+
 // "Notify me when it's back": one row per customer and product (signed-in customers only, so the address
 // is verified). notifiedAt is set by the same statement that picks the rows to email (src/lib/alerts.ts),
 // so a restock emails each person once; asking again on a later sell-out clears it.

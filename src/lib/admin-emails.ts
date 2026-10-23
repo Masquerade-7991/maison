@@ -6,7 +6,10 @@ import { db } from "@/db";
 import { emailLog, orders } from "@/db/schema";
 import { siteUrl } from "@/lib/email";
 import {
+  accountDeletedEmail,
   backInStockEmail,
+  deletionCancelledEmail,
+  deletionScheduledEmail,
   contactAckEmail,
   contactMessageEmail,
   newOrderAdminEmail,
@@ -35,6 +38,9 @@ export async function emailPreviews(): Promise<Preview[]> {
   add("Account", "Welcome", welcomeEmail(site, "Ana Sousa"));
   add("Account", "Reset password", resetPasswordEmail(site, "Ana Sousa", `${site}/reset-password?token=sample`));
   add("Account", "Password changed", passwordChangedEmail(site, "Ana Sousa"));
+  add("Account", "Deletion scheduled", deletionScheduledEmail(site, "Ana Sousa", new Date(Date.now() + 14 * 86_400_000)));
+  add("Account", "Deletion cancelled", deletionCancelledEmail(site, "Ana Sousa"));
+  add("Account", "Account deleted", accountDeletedEmail(site, "Ana Sousa"));
 
   const [latest] = await db.select({ id: orders.id }).from(orders).where(eq(orders.status, "paid")).orderBy(desc(orders.paidAt)).limit(1);
   const order = latest ? await getOrder(latest.id) : null;

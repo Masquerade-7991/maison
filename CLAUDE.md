@@ -29,7 +29,7 @@ Env lives in `.env` (from `.env.example`). You can't read or write `.env` (permi
 There is no test runner.
 
 - `npm run check`: the pure rules, run by Node 23+ (which strips TS types). That's why pure modules import each other as `./x.ts` and `tsconfig.json` sets `allowImportingTsExtensions`.
-- `npm run check:payment` and `npm run e2e:checkout | e2e:customer-flow | e2e:password-reset | e2e:contact | e2e:admin-stock | e2e:admin-flow` work on the shared production database and clean up after themselves. Test accounts are always `qa.…@example.com` and test products `qa-…`.
+- `npm run check:payment` and `npm run e2e:checkout | e2e:customer-flow | e2e:password-reset | e2e:contact | e2e:admin-stock | e2e:admin-flow | e2e:markets | e2e:alerts | e2e:account-deletion` work on the shared production database and clean up after themselves. Test accounts are always `qa.…@example.com` and test products `qa-…`.
 - The e2e runs drive an installed Edge through `playwright-core` (`BROWSER_CHANNEL=chrome` for Chrome) against `npm run build` then `EMAIL_OFF=true EMAIL_LINKS_ON_PAGE=true BETTER_AUTH_URL=http://localhost:3100 npx next start -p 3100` (`EMAIL_OFF` keeps a local `SMTP_URL` from sending). Set `BASE=<url>` to target another server, such as the live site. Production mode allows 3 sign ups a minute, so leave a minute between runs. `e2e:customer-flow` needs `chain-shoulder-bag` to have 2 to 9 in stock.
 - After an interrupted run: `npx tsx scripts/e2e/db.mts cleanup:stale` lists leftover test accounts, and `cleanup <email…>` removes them and puts their paid stock back.
 
@@ -79,6 +79,14 @@ Only the home page, product pages and story pages are static, per market (ISR, `
 - Server code reads the session only through `src/lib/session.ts`. Every protected page calls `requireUser`/`requireAdmin`, and every admin Server Action and admin data function (`src/lib/admin-*.ts`, `src/lib/users.ts`) starts with `await assertAdmin()`. Never rely on a layout for access: layouts don't render again on client navigation. `src/app/admin/admin-guard.check.mjs` enforces this. Customers get a plain 404 from admin routes.
 - `src/proxy.ts` matches everything except `/api/**`, `/_next/**` and files with an extension. Keep `/api/**` out of it: Stripe sends no cookie.
 - `user.role` has `input: false`. Only `auth:set-role` (how the first admin is made; it refuses unverified emails) and `/admin/accounts` change it. An admin can't change their own role, and a role change deletes that user's sessions. `?next=` redirects go through `safeNext()`.
+
+### Account deletion
+
+Customers delete their own account from `/account` (`src/components/delete-account.tsx`): a separate red section, then a `<dialog>` that only enables "Delete my account" once the account's email is typed (Enter submits), and says deletion completes automatically within 14 days. `src/lib/account-deletion.ts` owns `account_deletions`:
+
+- **Requesting** stores `scheduled_for` (now + `DELETION_DAYS`), deletes every session (signed out everywhere) and emails the date. Refused for admins (an admin could lock the shop out) and while an order is in progress (pending, processing, or paid and not yet delivered or cancelled).
+- **Signing back in** shows a banner with the date and "Keep my account" (`cancelDeletion`, emailed). Signing in alone doesn't cancel.
+- **Completing** runs nightly (`/api/cron/account-deletions`, `CRON_SECRET`): accounts without orders are deleted (sessions, logins, bag, alerts cascade); accounts with orders are **anonymised** (`orders.user_id` is `restrict`): the user row becomes "Deleted customer" at `deleted-<id>@deleted.invalid` with no login, and its orders keep amounts and items but lose `customer_email`, `shipping_name` and `shipping_address`. Their `email_log` rows and reset tokens go too. An account whose order is still in progress is skipped until it settles. The goodbye email is sent first.
 
 ### Bag
 
