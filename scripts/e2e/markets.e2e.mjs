@@ -81,6 +81,17 @@ try {
   await page.waitForURL(/checkout\.stripe\.com/, { timeout: 30000 });
   await page.getByText(total.replace("¥", "")).first().waitFor({ timeout: 20000 });
   pass(`bag total ${total} (product ${yen}) is the total on Stripe's page, in yen`);
+
+  // ── Each region gets its own homepage (src/lib/home-variants.ts); India keeps the default ─────────────
+  const homes = { IN: "The Quiet Season", US: "The Gifting Season", GB: "Made to Last", JP: "In Detail", AU: "Into the Light", AE: "Evenings, Gathered" };
+  for (const [country, title] of Object.entries(homes)) {
+    const ctx = await browser.newContext({ extraHTTPHeaders: { "x-vercel-ip-country": country } });
+    const home = await ctx.newPage();
+    await home.goto(`${BASE}/`);
+    assert.equal(await home.locator("h1").innerText(), title, `${country} homepage`);
+    await ctx.close();
+  }
+  pass(`each region's homepage: ${Object.entries(homes).map(([c, t]) => `${c} "${t}"`).join(", ")}`);
 } catch (e) {
   console.log(`FAILED: ${e.message}`);
   process.exitCode = 1;
