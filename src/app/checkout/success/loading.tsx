@@ -4,7 +4,7 @@ export default function Loading() {
     <section className="container-page py-6 md:py-10" aria-busy>
       <div className="grid grid-cols-1 items-start gap-10 lg:grid-cols-12 lg:gap-14">
         <div className="lg:col-span-7">
-          <div className="scheme-invert flex flex-col px-6 py-10 sm:px-10 sm:py-14 lg:px-14 lg:py-16">
+          <div className="flex flex-col bg-surface px-6 py-10 sm:px-10 sm:py-14 lg:px-14 lg:py-16">
             <div className="flex items-center gap-4">
               <span aria-hidden className="size-5 animate-spin rounded-full border border-current border-t-transparent" />
               <p className="label text-muted">Order confirmation</p>

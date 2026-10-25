@@ -86,9 +86,9 @@ export default async function CheckoutSuccessPage({ searchParams }: PageProps<"/
   return (
     <section className="container-page py-6 md:py-10">
       <div className="grid grid-cols-1 items-start gap-10 lg:grid-cols-12 lg:gap-14">
-        {/* Left: the moment. An inverted panel that stays beside the order on desktop. */}
+        {/* Left: the moment. A raised panel in the page's own theme, beside the order on desktop. */}
         <div className="lg:sticky lg:top-[calc(var(--spacing-header)+1.5rem)] lg:col-span-7">
-          <div className="scheme-invert flex flex-col px-6 py-10 sm:px-10 sm:py-14 lg:px-14 lg:py-16">
+          <div className="flex flex-col bg-surface px-6 py-10 sm:px-10 sm:py-14 lg:px-14 lg:py-16">
             {/* Live region: announces "Confirming" turning into "Thank you" when AutoRefresh re-renders. */}
             <header aria-live="polite">
               <div className="flex items-center gap-4">
