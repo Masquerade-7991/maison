@@ -4,12 +4,14 @@ import Link from "next/link";
 import { BagLineControls } from "@/components/bag-line-controls";
 import { CheckoutButton } from "@/components/checkout-button";
 import { ProductCard } from "@/components/product-card";
+import { UPI_MAX_PAISE, upiAllowed } from "@/lib/address-rules";
 import { getBag } from "@/lib/cart";
 import { lineTotalCents, type BagLine } from "@/lib/cart-rules";
 import { formatMoney } from "@/lib/format";
 import { getMarket } from "@/lib/market-server";
 import { INTERNATIONAL } from "@/lib/markets";
 import { getNewArrivals } from "@/lib/products";
+import { razorpayUpiReady } from "@/lib/razorpay";
 import { services } from "@/lib/sample-data";
 import { requireUser } from "@/lib/session";
 import { stockCopy, stockTone } from "@/lib/stock";
@@ -25,6 +27,10 @@ export default async function BagPage({ searchParams }: PageProps<"/bag">) {
   const bag = await getBag(user.id, market);
   const empty = bag.lines.length === 0;
   const suggestions = empty ? await getNewArrivals(4, market.id) : [];
+  // UPI (Razorpay) is a second choice in India only, and only up to UPI's per-payment limit.
+  const upiMarket = (await razorpayUpiReady()) && upiAllowed(market.id, bag.currency, UPI_MAX_PAISE);
+  const upi = upiMarket && upiAllowed(market.id, bag.currency, bag.subtotalCents);
+  const delivery = `You'll add a delivery address in ${market.id === INTERNATIONAL ? "the United States" : market.name} next.`;
 
   return (
     <section className="container-page py-12 md:py-20">
@@ -101,11 +107,15 @@ export default async function BagPage({ searchParams }: PageProps<"/bag">) {
                 </div>
               </dl>
               {bag.payableCount < bag.itemCount && <p className="mt-2 text-right text-muted">Excludes sold-out pieces.</p>}
-              <CheckoutButton blocked={bag.hasIssues} />
+              <CheckoutButton blocked={bag.hasIssues} upi={upi} />
               <p id="checkout-note" className="mt-3 text-center text-muted">
                 {bag.hasIssues
                   ? "Review the marked pieces before checking out."
-                  : `Secure payment by Stripe in ${bag.currency}. You'll add a delivery address in ${market.id === INTERNATIONAL ? "the United States" : market.name} next.`}
+                  : upi
+                    ? `Card payments by Stripe · UPI by Razorpay, in ${bag.currency}. ${delivery}`
+                    : upiMarket
+                      ? `Secure payment by Stripe in ${bag.currency}. UPI is available for orders up to ${formatMoney(UPI_MAX_PAISE, "INR")}. ${delivery}`
+                      : `Secure payment by Stripe in ${bag.currency}. ${delivery}`}
               </p>
             </div>
             <ul className="mt-8 space-y-5 px-1">

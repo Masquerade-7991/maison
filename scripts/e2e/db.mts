@@ -29,7 +29,7 @@ switch (cmd) {
     // Compact JSON of a test user's orders, oldest first.
     const u = await testUser(args[0]);
     const rows = u
-      ? await db.select({ id: orders.id, status: orders.status, session: orders.stripeCheckoutSessionId, currency: orders.currency, market: orders.market, subtotal: orders.subtotalCents, total: orders.amountTotalCents }).from(orders).where(eq(orders.userId, u.id)).orderBy(orders.createdAt)
+      ? await db.select({ id: orders.id, status: orders.status, session: orders.stripeCheckoutSessionId, currency: orders.currency, market: orders.market, subtotal: orders.subtotalCents, total: orders.amountTotalCents, provider: orders.provider, razorpayOrderId: orders.razorpayOrderId }).from(orders).where(eq(orders.userId, u.id)).orderBy(orders.createdAt)
       : [];
     console.log(JSON.stringify(rows));
     break;

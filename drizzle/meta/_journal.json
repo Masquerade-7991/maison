@@ -78,6 +78,13 @@
       "when": 1792792963467,
       "tag": "0010_late_grandmaster",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792937559761,
+      "tag": "0011_lethal_falcon",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,6 @@
 // node src/lib/order-rules.check.mjs
 import assert from "node:assert/strict";
-import { CHECKOUT_EVENTS, intentStatus, nextFulfilment, nextStatus, refundLabel, sessionEvent } from "./order-rules.ts";
+import { CHECKOUT_EVENTS, intentStatus, nextFulfilment, nextStatus, nextStatusFromFact, refundLabel, sessionEvent } from "./order-rules.ts";
 
 const C = "checkout.session.completed";
 const OK = "checkout.session.async_payment_succeeded";
@@ -55,6 +55,16 @@ assert.equal(viaIntent("processing", "paid", "requires_payment_method"), "paid",
 assert.equal(intentStatus({ payment_intent: { status: "canceled" } }), "canceled");
 assert.equal(intentStatus({ payment_intent: "pi_123" }), null);
 assert.equal(intentStatus({ payment_intent: null }), null);
+
+// Gateway-neutral facts (Razorpay).
+assert.equal(nextStatusFromFact("pending", "paid"), "paid");
+assert.equal(nextStatusFromFact("processing", "paid"), "paid");
+assert.equal(nextStatusFromFact("pending", "failed"), null, "a declined UPI request can be retried: the order stays pending");
+assert.equal(nextStatusFromFact("processing", "failed"), "payment_failed");
+assert.equal(nextStatusFromFact("pending", "expired"), "expired");
+assert.equal(nextStatusFromFact("processing", "expired"), null, "never expire a payment still clearing");
+for (const s of ["paid", "payment_failed", "expired"])
+  for (const f of ["paid", "failed", "expired"]) assert.equal(nextStatusFromFact(s, f), null, `${s} + ${f} must not change`);
 
 // Fulfilment: admin-driven, paid orders only, forward only.
 const T = { carrier: "UPS", trackingNumber: "1Z999" };

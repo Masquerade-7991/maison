@@ -22,6 +22,7 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
   const order = isUuid(id) ? await getAdminOrder(id) : null;
   if (!order) notFound();
   const paid = order.status === "paid";
+  const gateway = order.provider === "razorpay" ? "Razorpay" : "Stripe";
   const refund = refundLabel(order.refundedCents, order.amountTotalCents ?? order.subtotalCents, (c) => formatMoney(c, order.currency));
   const log = await emailLogFor(order.id);
   // The order emails that match where the order is now, so a resend never tells the customer something untrue.
@@ -38,6 +39,10 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
           <p className="mt-2 text-muted">
             {order.customerEmail ?? order.accountEmail} · Placed {date.format(order.createdAt)}
             {order.paidAt && ` · Paid ${date.format(order.paidAt)}`}
+          </p>
+          <p className="mt-1 text-muted">
+            {order.provider === "razorpay" ? "UPI through Razorpay" : "Card through Stripe"}
+            {order.razorpayPaymentId && <> · Payment <span className="tabular-nums">{order.razorpayPaymentId}</span></>}
           </p>
           {order.currency !== "usd" && (
             <p className="mt-1 text-muted">
@@ -62,7 +67,7 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
 
       <div className="mt-8">
         {!paid ? (
-          <p className="border-l-2 border-line pl-4 text-muted">Fulfilment opens once Stripe confirms the payment.</p>
+          <p className="border-l-2 border-line pl-4 text-muted">Fulfilment opens once {gateway} confirms the payment.</p>
         ) : order.fulfilmentStatus === "unfulfilled" || order.fulfilmentStatus === "shipped" ? (
           <>
             {order.fulfilmentStatus === "shipped" && (
@@ -78,7 +83,7 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
           </p>
         ) : (
           <p className="border-l-2 border-line pl-4 text-muted">
-            Cancelled {order.cancelledAt && date.format(order.cancelledAt)}. Make sure the refund has been issued in the Stripe Dashboard.
+            Cancelled {order.cancelledAt && date.format(order.cancelledAt)}. Make sure the refund has been issued in the {gateway} Dashboard.
           </p>
         )}
       </div>

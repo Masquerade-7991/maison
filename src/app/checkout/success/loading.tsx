@@ -1,4 +1,4 @@
-// Shown while the page asks Stripe for the session on the way back from payment. Same split as the page.
+// Shown while the page asks Stripe (or Razorpay, for UPI) for the payment on the way back from it. Same split as the page.
 export default function Loading() {
   return (
     <section className="container-page py-6 md:py-10" aria-busy>

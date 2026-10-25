@@ -3,6 +3,7 @@
   "regions": ["cle1"],
   "crons": [
     { "path": "/api/cron/fx", "schedule": "30 16 * * 1-5" },
-    { "path": "/api/cron/account-deletions", "schedule": "0 3 * * *" }
+    { "path": "/api/cron/account-deletions", "schedule": "0 3 * * *" },
+    { "path": "/api/cron/payments", "schedule": "30 3 * * *" }
   ]
 }

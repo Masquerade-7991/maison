@@ -7,50 +7,66 @@ import { AutoRefresh } from "@/components/auto-refresh";
 import { OrderDelivery, OrderTotals } from "@/components/order-details";
 import { emailIsOff } from "@/lib/email";
 import { formatMoney } from "@/lib/format";
-import { applyCheckoutSession, getOrderForUser } from "@/lib/orders";
+import { applyCheckoutSession, getOrderForUser, syncRazorpayOrder } from "@/lib/orders";
 import { intentStatus, orderReference, orderStatusCopy, sessionEvent } from "@/lib/order-rules";
 import { requireUser } from "@/lib/session";
 import { stripe } from "@/lib/stripe";
 
 export const metadata: Metadata = { title: "Order confirmation | Maison", robots: { index: false } };
 
-// Arriving here never marks an order paid by itself. The session_id in the URL is just a lookup key:
-// the session is fetched from Stripe server-side, must belong to the signed-in customer, and only
-// Stripe's own status for it can move the order (the webhook's fallback, see below).
-export default async function CheckoutSuccessPage({ searchParams }: PageProps<"/checkout/success">) {
-  const raw = (await searchParams).session_id;
-  const sessionId = typeof raw === "string" && /^cs_[A-Za-z0-9_]{10,200}$/.test(raw) ? raw : null;
-  const { user } = await requireUser(sessionId ? `/checkout/success?session_id=${sessionId}` : "/bag");
-  if (!sessionId) notFound();
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-  let session: Stripe.Checkout.Session;
-  try {
-    session = await stripe().checkout.sessions.retrieve(sessionId, { expand: ["payment_intent"] });
-  } catch (e) {
-    // Only an unknown session is "not found"; a Stripe outage goes to the error boundary's "Try again",
-    // so a customer who has just paid is never told their order doesn't exist.
-    if ((e as { statusCode?: number }).statusCode === 404) notFound();
-    throw e;
+// Arriving here never marks an order paid by itself. The session_id (Stripe) or order id (UPI, from
+// Razorpay's return) in the URL is just a lookup key: the order must belong to the signed-in customer,
+// and only the gateway's own records can move it (the webhook's fallback, see below).
+export default async function CheckoutSuccessPage({ searchParams }: PageProps<"/checkout/success">) {
+  const query = await searchParams;
+  const raw = query.session_id;
+  const sessionId = typeof raw === "string" && /^cs_[A-Za-z0-9_]{10,200}$/.test(raw) ? raw : null;
+  const orderParam = !sessionId && typeof query.order === "string" && UUID.test(query.order) ? query.order : null;
+  const { user } = await requireUser(
+    sessionId ? `/checkout/success?session_id=${sessionId}` : orderParam ? `/checkout/success?order=${orderParam}` : "/bag",
+  );
+  if (!sessionId && !orderParam) notFound();
+
+  let session: Stripe.Checkout.Session | null = null;
+  if (sessionId) {
+    try {
+      session = await stripe().checkout.sessions.retrieve(sessionId, { expand: ["payment_intent"] });
+    } catch (e) {
+      // Only an unknown session is "not found"; a Stripe outage goes to the error boundary's "Try again",
+      // so a customer who has just paid is never told their order doesn't exist.
+      if ((e as { statusCode?: number }).statusCode === 404) notFound();
+      throw e;
+    }
   }
-  const orderId = session.metadata?.order_id;
-  if (session.client_reference_id !== user.id || !orderId) notFound();
+  const orderId = session ? session.metadata?.order_id : orderParam;
+  if ((session && session.client_reference_id !== user.id) || !orderId) notFound();
 
   let order = await getOrderForUser(orderId, user.id);
   if (!order) notFound();
+  const upi = order.provider === "razorpay";
 
   // Webhook late or never delivered: apply the session as Stripe's API reports it (fetched above with
   // our secret key, never from the URL or the browser). Same idempotent transition as the webhook, so
-  // whichever arrives second changes nothing.
-  const event = order.status === "pending" || order.status === "processing" ? sessionEvent(session.status, session.payment_status, intentStatus(session)) : null;
-  if (event) {
+  // whichever arrives second changes nothing. A pending UPI order asks Razorpay the same way.
+  const event =
+    session && (order.status === "pending" || order.status === "processing") ? sessionEvent(session.status, session.payment_status, intentStatus(session)) : null;
+  if (session && event) {
     await applyCheckoutSession(session, event);
+    order = (await getOrderForUser(orderId, user.id))!;
+  } else if (upi && order.status === "pending") {
+    await syncRazorpayOrder(order.id);
     order = (await getOrderForUser(orderId, user.id))!;
   }
 
   const paid = order.status === "paid";
   const processing = order.status === "processing";
   // Stripe has the payment but the webhook hasn't reached us yet: show "confirming" and poll.
-  const confirming = order.status === "pending" && session.status === "complete";
+  const confirming = order.status === "pending" && session?.status === "complete";
+  // UPI: the customer approves in their own app, which can take a minute. Poll until Razorpay has it.
+  const approving = upi && order.status === "pending";
+  const upiFailed = upi && (order.status === "payment_failed" || order.status === "expired");
   const onItsWay = paid || processing || confirming; // the order will go ahead: show what comes next
   const firstName = user.name.trim().split(/\s+/)[0];
   const email = order.customerEmail ?? user.email;
@@ -67,13 +83,17 @@ export default async function CheckoutSuccessPage({ searchParams }: PageProps<"/
         : "Your order is confirmed. Email is switched off on this site, so no receipt is sent: your order is saved under Account, Orders. Here is what happens now."]
     : confirming
       ? ["Confirming payment", "Confirming your order", "Stripe is confirming your payment with us. This usually takes a few seconds, and your order is safe if you leave this page."]
-      : processing
-        ? ["Payment processing", "Your payment is processing", "Your bank is confirming the payment. We'll prepare your order as soon as it clears."]
-        : order.status === "payment_failed"
-          ? ["Payment failed", "Your payment didn't go through", "Your bank declined the payment, so nothing was charged. Your bag is saved: you can try again with another payment method."]
-          : order.status === "expired"
-            ? ["Checkout expired", "This checkout has expired", "Checkout sessions close after 30 minutes, or when a newer one starts. Nothing was charged and your bag is saved."]
-            : [orderStatusCopy[order.status], "This checkout isn't finished", "No payment has been taken. Your bag is saved if you'd like to check out again."];
+      : approving
+        ? ["Awaiting payment", "Waiting for your approval", "Approve the payment in your UPI app. This page updates by itself."]
+        : upiFailed
+          ? ["Payment not completed", "Your UPI payment didn't go through", "The UPI request expired or was declined. Nothing was charged, and your bag is saved."]
+          : processing
+            ? ["Payment processing", "Your payment is processing", "Your bank is confirming the payment. We'll prepare your order as soon as it clears."]
+            : order.status === "payment_failed"
+              ? ["Payment failed", "Your payment didn't go through", "Your bank declined the payment, so nothing was charged. Your bag is saved: you can try again with another payment method."]
+              : order.status === "expired"
+                ? ["Checkout expired", "This checkout has expired", "Checkout sessions close after 30 minutes, or when a newer one starts. Nothing was charged and your bag is saved."]
+                : [orderStatusCopy[order.status], "This checkout isn't finished", "No payment has been taken. Your bag is saved if you'd like to check out again."];
 
   const steps = [
     paid
@@ -97,7 +117,7 @@ export default async function CheckoutSuccessPage({ searchParams }: PageProps<"/
                     <circle cx="24" cy="24" r="23" pathLength={1} strokeDasharray="1" className="motion-safe:animate-draw" />
                     <path d="M15 24.5l6 6 12-13" pathLength={1} strokeDasharray="1" className="motion-safe:animate-draw motion-safe:[animation-delay:600ms]" />
                   </svg>
-                ) : confirming || processing ? (
+                ) : confirming || approving || processing ? (
                   <span aria-hidden className="size-5 shrink-0 animate-spin rounded-full border border-current border-t-transparent" />
                 ) : null}
                 <p className={`label ${order.status === "payment_failed" ? "text-danger" : "text-muted"}`}>
@@ -115,6 +135,8 @@ export default async function CheckoutSuccessPage({ searchParams }: PageProps<"/
               )}
               <p className="mt-6 max-w-md text-base leading-relaxed text-muted motion-safe:animate-rise motion-safe:[animation-delay:300ms]">{body}</p>
               {confirming && <AutoRefresh />}
+              {/* Approving takes longer than a webhook; stops by itself once the order fails or expires. */}
+              {approving && <AutoRefresh everyMs={3000} maxTries={40} />}
             </header>
 
             {onItsWay && (

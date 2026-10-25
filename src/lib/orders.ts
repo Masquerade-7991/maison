@@ -1,18 +1,31 @@
 // The only module that reads or writes orders. Orders are created "pending" from the bag (our prices),
-// then moved forward only by applyCheckoutSession with a Checkout Session that came from Stripe
-// itself: a signature-verified webhook event, or a server-side sessions.retrieve().
-import { and, asc, desc, eq, inArray, lt, ne, sql, type SQL } from "drizzle-orm";
+// then moved forward only by facts that came from the gateway itself: applyCheckoutSession with a Stripe
+// Checkout Session (a signature-verified webhook event, or a server-side sessions.retrieve()), or
+// applyRazorpayPayment with a Razorpay payment (its signed webhook, or fetched from its API).
+import { and, asc, desc, eq, inArray, isNotNull, lt, ne, sql, type SQL } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import type Stripe from "stripe";
 import { db } from "@/db";
 import { orderItems, orders, productImages, user } from "@/db/schema";
 import type { Bag } from "@/lib/cart-rules";
 import { sendEmail, siteUrl, type SendResult } from "@/lib/email";
+import { renderEmail } from "@/lib/emails/layout";
 import { newOrderAdminEmail, orderEmail, type OrderEmailKind } from "@/lib/emails/templates";
-import { nextStatus, type CheckoutEvent, type OrderStatus } from "@/lib/order-rules";
+import type { IndianAddress } from "@/lib/address-rules";
+import { formatMoney } from "@/lib/format";
+import { nextStatus, nextStatusFromFact, orderReference, type CheckoutEvent, type OrderStatus } from "@/lib/order-rules";
+import { fetchOrderPayments, fetchPayment, type RazorpayPayment } from "@/lib/razorpay";
+
+// ponytail: 30 is Stripe's minimum, checked against Stripe's clock; the slack covers a server clock
+// running behind (a dev machine 66s slow had every session refused). Oversell window is ~35 minutes.
+// A Razorpay order with no captured payment is expired after the same window.
+export const SESSION_MINUTES = 30 + 5;
+
+/** UPI checkout: Razorpay's page collects no address, so the order is created with ours. */
+export type UpiDelivery = { email: string; name: string; phone: string; address: IndianAddress };
 
 /** Snapshot the bag into a pending order. The caller has already checked the bag has no stock issues. */
-export async function createPendingOrder(userId: string, bag: Bag) {
+export async function createPendingOrder(userId: string, bag: Bag, upi?: UpiDelivery) {
   const orderId = crypto.randomUUID();
   const rows = bag.lines.map((l) => ({
     orderId,
@@ -31,6 +44,8 @@ export async function createPendingOrder(userId: string, bag: Bag) {
       currency: bag.currency.toLowerCase(), // Stripe's spelling, so it compares with session.currency
       market: bag.market,
       usdRate: bag.usdRate,
+      // The phone rides in the address: readers that expect Stripe's address shape ignore it.
+      ...(upi && { provider: "razorpay" as const, customerEmail: upi.email, shippingName: upi.name, shippingAddress: { ...upi.address, phone: upi.phone } }),
     }),
     db.insert(orderItems).values(rows),
   ]);
@@ -42,6 +57,16 @@ export async function attachSession(orderId: string, sessionId: string) {
   await db.update(orders).set({ stripeCheckoutSessionId: sessionId }).where(eq(orders.id, orderId));
 }
 
+export async function attachRazorpayOrder(orderId: string, razorpayOrderId: string) {
+  await db.update(orders).set({ razorpayOrderId }).where(eq(orders.id, orderId));
+}
+
+/** The Razorpay order we created for this order: the only one its payments are checked against. */
+export async function storedRazorpayOrderId(orderId: string) {
+  const [row] = await db.select({ id: orders.razorpayOrderId }).from(orders).where(eq(orders.id, orderId)).limit(1);
+  return row?.id ?? null;
+}
+
 /** Only a still-pending order can be expired; anything Stripe already moved forward is left alone. */
 export async function expireIfPending(orderId: string) {
   await db.update(orders).set({ status: "expired" }).where(and(eq(orders.id, orderId), eq(orders.status, "pending")));
@@ -50,7 +75,7 @@ export async function expireIfPending(orderId: string) {
 /** Orders a new checkout must settle first: pending ones (maybe paid, webhook late) and processing ones. */
 export async function unsettledOrdersFor(userId: string) {
   return db
-    .select({ id: orders.id, status: orders.status, sessionId: orders.stripeCheckoutSessionId })
+    .select({ id: orders.id, status: orders.status, provider: orders.provider, sessionId: orders.stripeCheckoutSessionId })
     .from(orders)
     .where(and(eq(orders.userId, userId), inArray(orders.status, ["pending", "processing"])));
 }
@@ -86,10 +111,43 @@ export async function applyCheckoutSession(
   const next = nextStatus(order.status, event, session.payment_status);
   if (!next) return refreshStock({ orderId, status: order.status as OrderStatus, changed: false });
 
-  const paid = next === "paid";
   const shipping = session.collected_information?.shipping_details ?? null;
+  const changed = await applyPaymentFact(orderId, order.status as OrderStatus, next, {
+    amountTotal: session.amount_total,
+    stripePaymentIntentId: idOf(session.payment_intent),
+    customerEmail: session.customer_details?.email ?? null,
+    shippingName: shipping?.name ?? null,
+    shippingAddressJson: shipping ? JSON.stringify(shipping.address) : null,
+  });
+  // Lost the race to a concurrent call. If the winner moved the order to a status this event can still
+  // advance (e.g. it went pending → processing while this payment-succeeded event read "pending"), apply
+  // it again once from there: a webhook answered 200 here is never redelivered, so it would be lost.
+  if (!changed) {
+    const [now] = await db.select({ status: orders.status }).from(orders).where(eq(orders.id, orderId));
+    if (!retried && now.status !== order.status && nextStatus(now.status as OrderStatus, event, session.payment_status)) {
+      return applyCheckoutSession(session, event, true);
+    }
+    return refreshStock({ orderId, status: now.status as OrderStatus, changed: false });
+  }
+  await announce(orderId, next);
+  return refreshStock({ orderId, status: next, changed: true });
+}
+
+/** What the gateway reported with the payment. Null leaves the stored value as it is. */
+type PaymentDetails = {
+  amountTotal: number | null;
+  stripePaymentIntentId?: string | null;
+  razorpayPaymentId?: string | null;
+  customerEmail?: string | null;
+  shippingName?: string | null;
+  shippingAddressJson?: string | null;
+};
+
+/** Move the order from `current` to `next` in ONE guarded statement. Returns whether this call moved it. */
+async function applyPaymentFact(orderId: string, current: OrderStatus, next: OrderStatus, d: PaymentDetails) {
+  const paid = next === "paid";
   // Everything, including the shortfall flag, is ONE statement, so nothing can fail between the order
-  // becoming paid and its side effects (a Stripe retry would find it paid and do nothing).
+  // becoming paid and its side effects (a gateway retry would find it paid and do nothing).
   // `g` locks the order row first: a concurrent call for the same order waits, then re-checks
   // `status = current` against the committed row (READ COMMITTED) and matches nothing, so only one call
   // decrements. Shortfall is read from the decrement itself, not the snapshot: an UPDATE re-checks
@@ -98,7 +156,7 @@ export async function applyCheckoutSession(
   // stock decrements too but is never short. `t` reads `short`, so it runs after the decrement.
   const result = await db.execute<{ changed: number }>(sql`
     with g as (
-      select id from orders where id = ${orderId} and status = ${order.status}::order_status for update
+      select id from orders where id = ${orderId} and status = ${current}::order_status for update
     ),
     lines as (select product_id, sum(quantity)::int as q from order_items where ${paid} and order_id in (select id from g) group by product_id),
     dec as (
@@ -116,11 +174,12 @@ export async function applyCheckoutSession(
         status = ${next}::order_status,
         updated_at = now(),
         paid_at = case when ${paid} then now() else paid_at end,
-        amount_total_cents = coalesce(${session.amount_total}, amount_total_cents),
-        stripe_payment_intent_id = coalesce(${idOf(session.payment_intent)}, stripe_payment_intent_id),
-        customer_email = coalesce(${session.customer_details?.email ?? null}, customer_email),
-        shipping_name = coalesce(${shipping?.name ?? null}, shipping_name),
-        shipping_address = coalesce(${shipping ? JSON.stringify(shipping.address) : null}::jsonb, shipping_address),
+        amount_total_cents = coalesce(${d.amountTotal}, amount_total_cents),
+        stripe_payment_intent_id = coalesce(${d.stripePaymentIntentId ?? null}, stripe_payment_intent_id),
+        razorpay_payment_id = coalesce(${d.razorpayPaymentId ?? null}, razorpay_payment_id),
+        customer_email = coalesce(${d.customerEmail ?? null}, customer_email),
+        shipping_name = coalesce(${d.shippingName ?? null}, shipping_name),
+        shipping_address = coalesce(${d.shippingAddressJson ?? null}::jsonb, shipping_address),
         stock_shortfall = stock_shortfall or exists (select 1 from short where not made_to_order)
       where id in (select id from g)
       returning id, user_id
@@ -132,24 +191,123 @@ export async function applyCheckoutSession(
     )
     select (select count(*) from t)::int as changed
   `);
-  const changed = (result.rows[0]?.changed ?? 0) > 0;
-  // Lost the race to a concurrent call. If the winner moved the order to a status this event can still
-  // advance (e.g. it went pending → processing while this payment-succeeded event read "pending"), apply
-  // it again once from there: a webhook answered 200 here is never redelivered, so it would be lost.
-  if (!changed) {
-    const [now] = await db.select({ status: orders.status }).from(orders).where(eq(orders.id, orderId));
-    if (!retried && now.status !== order.status && nextStatus(now.status as OrderStatus, event, session.payment_status)) {
-      return applyCheckoutSession(session, event, true);
-    }
-    return refreshStock({ orderId, status: now.status as OrderStatus, changed: false });
-  }
-  // Only the call whose guarded UPDATE moved the order gets here, so the confirmation goes at most once
-  // (notifyCustomer never throws; a process killed right here would lose it, the order is still correct).
-  if (paid) {
+  return (result.rows[0]?.changed ?? 0) > 0;
+}
+
+/**
+ * Only the call whose guarded UPDATE moved the order gets here, so the confirmation goes at most once
+ * (notifyCustomer never throws; a process killed right here would lose it, the order is still correct).
+ */
+async function announce(orderId: string, next: OrderStatus) {
+  if (next === "paid") {
     await notifyCustomer(orderId, "confirmed");
     await notifyShop(orderId);
   } else if (next === "processing" || next === "payment_failed") await notifyCustomer(orderId, next);
-  return refreshStock({ orderId, status: next, changed: true });
+}
+
+/**
+ * Apply a Razorpay payment to its order: from the signed webhook, or fetched from Razorpay's API (the
+ * return route, the success page, the cron). Only a captured payment against the Razorpay order we
+ * created, in rupees, for exactly the order's total, pays it; anything else is logged and ignored. A
+ * failed attempt changes nothing: the customer can retry in their UPI app until the order expires.
+ * Safe to repeat and to race, like applyCheckoutSession.
+ */
+export async function applyRazorpayPayment(
+  payment: RazorpayPayment,
+  retried = false,
+): Promise<{ orderId: string; status: OrderStatus; changed: boolean } | null> {
+  if (!payment.order_id) return null;
+  const [order] = await db
+    .select({ id: orders.id, status: orders.status, currency: orders.currency, subtotalCents: orders.subtotalCents, paymentId: orders.razorpayPaymentId })
+    .from(orders)
+    .where(and(eq(orders.provider, "razorpay"), eq(orders.razorpayOrderId, payment.order_id)))
+    .limit(1);
+  if (!order) return null;
+  const status = order.status as OrderStatus;
+  if (payment.status !== "captured") return { orderId: order.id, status, changed: false };
+  if (payment.currency !== "INR" || order.currency !== "inr" || payment.amount !== order.subtotalCents) {
+    console.error("[orders] Razorpay payment does not match the order, not applied", { orderId: order.id, payment: payment.id, amount: payment.amount, currency: payment.currency, subtotal: order.subtotalCents });
+    return null;
+  }
+
+  const next = nextStatusFromFact(status, "paid");
+  if (!next) {
+    // Money taken for an order we already closed (expired, or paid by another payment): nothing to apply,
+    // so someone has to refund it in the Razorpay Dashboard.
+    if (order.paymentId !== payment.id) await alertOrphanPayment(order.id, status, payment);
+    return refreshStock({ orderId: order.id, status, changed: false });
+  }
+  const changed = await applyPaymentFact(order.id, status, next, { amountTotal: payment.amount, razorpayPaymentId: payment.id });
+  // Lost a race: read the order again, once, and handle the payment from its new status.
+  if (!changed) return retried ? { orderId: order.id, status, changed: false } : applyRazorpayPayment(payment, true);
+  await announce(order.id, next);
+  return refreshStock({ orderId: order.id, status: next, changed: true });
+}
+
+/** Tell the shop inbox to refund a captured payment no order can take. Never throws. */
+async function alertOrphanPayment(orderId: string, status: OrderStatus, payment: RazorpayPayment) {
+  const amount = formatMoney(payment.amount, "INR");
+  const why = status === "expired" ? "had already expired" : "was already paid by another payment";
+  console.error(`[orders] Razorpay payment ${payment.id} (${amount}) arrived for ${status} order ${orderId}: refund it`);
+  const to = process.env.CONTACT_TO;
+  if (!to) return;
+  try {
+    const ref = orderReference(orderId);
+    const mail = renderEmail({
+      site: siteUrl(),
+      subject: `Refund needed: UPI payment for ${ref}`,
+      preheader: `${amount} was captured for an order that ${why}.`,
+      blocks: [
+        { t: "label", text: "Payment to refund" },
+        { t: "title", text: `Refund ${payment.id}` },
+        { t: "p", text: `Razorpay captured ${amount} (${payment.id}) for ${ref}, but the order ${why}, so it was not applied. Refund it in the Razorpay Dashboard.` },
+        { t: "button", text: "Open in admin", href: `${siteUrl()}/admin/orders/${orderId}` },
+      ],
+    });
+    await sendEmail({ ...mail, to, kind: "admin.payment_orphan", ref: orderId });
+  } catch (e) {
+    console.error(`[order email] orphan payment alert for ${orderId} failed:`, e);
+  }
+}
+
+/**
+ * Ask Razorpay about a pending Razorpay order, for when the webhook is late or lost: a captured payment
+ * pays it, and with none after SESSION_MINUTES it expires. Returns the order's status afterwards, or
+ * null when it couldn't be checked (no such Razorpay order, or Razorpay unreachable). Never throws.
+ */
+export async function syncRazorpayOrder(orderId: string): Promise<OrderStatus | null> {
+  try {
+    const [order] = await db
+      .select({ status: orders.status, razorpayOrderId: orders.razorpayOrderId, createdAt: orders.createdAt })
+      .from(orders)
+      .where(and(eq(orders.id, orderId), eq(orders.provider, "razorpay")))
+      .limit(1);
+    if (!order) return null;
+    if (order.status !== "pending") return order.status as OrderStatus;
+    const payments = order.razorpayOrderId ? await fetchOrderPayments(order.razorpayOrderId) : [];
+    const captured = payments.find((p) => p.status === "captured");
+    if (captured) {
+      const r = await applyRazorpayPayment(captured);
+      if (r) return r.status;
+    }
+    // An authorized payment is about to be auto-captured, so the order isn't abandoned yet.
+    const capturing = payments.some((p) => p.status === "authorized");
+    if (!capturing && Date.now() - order.createdAt.getTime() > SESSION_MINUTES * 60_000) await expireIfPending(orderId);
+    const [now] = await db.select({ status: orders.status }).from(orders).where(eq(orders.id, orderId));
+    return now.status as OrderStatus;
+  } catch (e) {
+    console.error(`[orders] could not sync Razorpay order ${orderId}:`, e);
+    return null;
+  }
+}
+
+/** Pending Razorpay orders older than `minutes`, for the payments cron to settle. */
+export async function pendingRazorpayOrdersOlderThan(minutes: number) {
+  const rows = await db
+    .select({ id: orders.id })
+    .from(orders)
+    .where(and(eq(orders.provider, "razorpay"), eq(orders.status, "pending"), lt(orders.createdAt, new Date(Date.now() - minutes * 60_000))));
+  return rows.map((r) => r.id);
 }
 
 /**
@@ -172,6 +330,27 @@ export async function applyChargeRefund(charge: Stripe.Charge) {
     .update(orders)
     .set({ refundedCents: charge.amount_refunded })
     .where(and(eq(orders.id, order.id), eq(orders.status, "paid"), lt(orders.refundedCents, charge.amount_refunded)))
+    .returning({ id: orders.id });
+  if (updated.length > 0) await notifyCustomer(order.id, "refunded");
+  return { orderId: order.id, changed: updated.length > 0 };
+}
+
+/**
+ * Record a refund issued in the Razorpay Dashboard. The webhook's refund only names its payment, so the
+ * cumulative amount_refunded is read from Razorpay and stored with the same only-grows guard as above.
+ */
+export async function applyRazorpayRefund(paymentId: string) {
+  const payment = await fetchPayment(paymentId);
+  const [order] = await db
+    .select({ id: orders.id })
+    .from(orders)
+    .where(and(eq(orders.razorpayPaymentId, payment.id), eq(orders.status, "paid")))
+    .limit(1);
+  if (!order) return null;
+  const updated = await db
+    .update(orders)
+    .set({ refundedCents: payment.amount_refunded })
+    .where(and(eq(orders.id, order.id), eq(orders.status, "paid"), lt(orders.refundedCents, payment.amount_refunded)))
     .returning({ id: orders.id });
   if (updated.length > 0) await notifyCustomer(order.id, "refunded");
   return { orderId: order.id, changed: updated.length > 0 };
@@ -214,6 +393,30 @@ export async function listOrdersForUser(userId: string) {
     .from(orders)
     .where(and(eq(orders.userId, userId), ne(orders.status, "expired")))
     .orderBy(desc(orders.createdAt));
+}
+
+/** A stored delivery address: Stripe's shape, plus `phone` on Razorpay orders. */
+export type ShippingAddress = {
+  line1: string | null;
+  line2: string | null;
+  city: string | null;
+  state: string | null;
+  postal_code: string | null;
+  country: string | null;
+  phone?: string;
+};
+
+/** The delivery details of this user's latest order that has some, to prefill the UPI form. */
+export async function lastShippingFor(userId: string): Promise<{ name: string | null; phone: string | null; address: ShippingAddress | null } | null> {
+  const [row] = await db
+    .select({ name: orders.shippingName, address: orders.shippingAddress })
+    .from(orders)
+    .where(and(eq(orders.userId, userId), isNotNull(orders.shippingAddress)))
+    .orderBy(desc(orders.createdAt))
+    .limit(1);
+  if (!row) return null;
+  const address = row.address as ShippingAddress | null;
+  return { name: row.name, phone: address?.phone ?? null, address };
 }
 
 /** An order with its items, only if it belongs to this user. */

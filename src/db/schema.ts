@@ -272,10 +272,12 @@ export const emailLog = pgTable(
 
 // ─── Orders ──────────────────────────────────────────────────────────────────
 // Created "pending" when checkout starts (prices and items snapshotted from our DB), then moved
-// forward only by Stripe-verified events via applyCheckoutSession in src/lib/orders.ts.
+// forward only by gateway-verified facts (applyCheckoutSession, applyRazorpayPayment in src/lib/orders.ts).
 export const orderStatus = pgEnum("order_status", ["pending", "processing", "paid", "payment_failed", "expired"]);
 // What happened after payment, set by an admin (src/lib/admin-orders.ts). Separate from status, which only Stripe moves.
 export const fulfilmentStatus = pgEnum("fulfilment_status", ["unfulfilled", "shipped", "delivered", "cancelled"]);
+// Who took the payment: Stripe Checkout (cards, every market) or Razorpay (UPI, India only).
+export const paymentProvider = pgEnum("payment_provider", ["stripe", "razorpay"]);
 
 export const orders = pgTable(
   "orders",
@@ -284,6 +286,7 @@ export const orders = pgTable(
     // Financial record: never cascaded away with the user.
     userId: text().notNull().references(() => user.id, { onDelete: "restrict" }),
     status: orderStatus().notNull().default("pending"),
+    provider: paymentProvider().notNull().default("stripe"),
     // Every *Cents column on orders and order_items holds minor units of `currency` (cents, paise; whole
     // yen and won), not necessarily US cents.
     subtotalCents: integer().notNull(), // from our products table at checkout start, in the market's currency
@@ -293,9 +296,11 @@ export const orders = pgTable(
     usdRate: doublePrecision().notNull().default(1), // units of `currency` per USD used, for reporting in dollars
     stripeCheckoutSessionId: text().unique(),
     stripePaymentIntentId: text(),
+    razorpayOrderId: text().unique(), // order_…, created with this order; payments are only applied against it
+    razorpayPaymentId: text().unique(), // pay_…, the captured payment that paid it
     customerEmail: text(),
     shippingName: text(),
-    shippingAddress: jsonb(), // Stripe's collected address, as returned
+    shippingAddress: jsonb(), // Stripe's address shape (line1, city, postal_code…); Razorpay orders add `phone`
     stockShortfall: boolean().notNull().default(false), // stock was below the order when it was paid (oversell)
     refundedCents: integer().notNull().default(0), // Stripe's cumulative charge.amount_refunded (refunds are issued in the Dashboard)
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
@@ -312,6 +317,7 @@ export const orders = pgTable(
     index("orders_user_created_idx").on(t.userId, t.createdAt.desc()),
     check("orders_subtotal_positive", sql`${t.subtotalCents} > 0`),
     check("orders_refunded_non_negative", sql`${t.refundedCents} >= 0`),
+    check("orders_razorpay_inr", sql`${t.provider} <> 'razorpay' or ${t.currency} = 'inr'`),
   ],
 );
 

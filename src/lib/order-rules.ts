@@ -37,6 +37,24 @@ export function nextStatus(current: OrderStatus, event: CheckoutEvent, paymentSt
   }
 }
 
+/**
+ * A gateway-neutral fact about an order's payment, for gateways without Checkout Session events (Razorpay).
+ * Stripe keeps nextStatus above. A "failed" fact never ends a pending order: a UPI request that expired or
+ * was declined can be retried from the same order, so the order stays pending until it expires.
+ */
+export type PaymentFact = "paid" | "failed" | "expired";
+
+export function nextStatusFromFact(current: OrderStatus, fact: PaymentFact): OrderStatus | null {
+  switch (fact) {
+    case "paid":
+      return current === "pending" || current === "processing" ? "paid" : null;
+    case "failed":
+      return current === "processing" ? "payment_failed" : null;
+    case "expired":
+      return current === "pending" ? "expired" : null;
+  }
+}
+
 // A delayed payment that failed sends its PaymentIntent back to requires_payment_method (or canceled);
 // the Checkout Session itself just stays complete + unpaid, so this is the only fetched sign of it.
 const FAILED_INTENT = ["requires_payment_method", "canceled"];
