@@ -89,5 +89,5 @@ export async function emailLogFor(ref: string) {
 /** Sends an order email again, in the same thread. */
 export async function resendOrderEmail(orderId: string, kind: OrderEmailKind) {
   await assertAdmin();
-  await notifyCustomer(orderId, kind, true);
+  return notifyCustomer(orderId, kind, true);
 }

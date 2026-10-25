@@ -53,12 +53,15 @@ export async function fulfilmentAction(_prev: FulfilmentFormState, fd: FormData)
 
 const RESENDABLE = ["confirmed", "shipped", "delivered", "cancelled", "refunded"] as const;
 
+export type ResendState = { kind: string; result: "sent" | "logged" | "skipped" | "failed" } | null;
+
 /** Sends one order email again, in the order's thread (e.g. after a customer says it never arrived). */
-export async function resendEmailAction(fd: FormData): Promise<void> {
+export async function resendEmailAction(_prev: ResendState, fd: FormData): Promise<ResendState> {
   await assertAdmin();
   const id = typeof fd.get("id") === "string" ? (fd.get("id") as string) : "";
   const kind = fd.get("kind") as (typeof RESENDABLE)[number];
-  if (!isUuid(id) || !RESENDABLE.includes(kind)) return;
-  await resendOrderEmail(id, kind);
+  if (!isUuid(id) || !RESENDABLE.includes(kind)) return null;
+  const result = (await resendOrderEmail(id, kind)) ?? "failed";
   revalidatePath(`/admin/orders/${id}`);
+  return { kind, result };
 }

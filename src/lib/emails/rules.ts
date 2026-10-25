@@ -55,5 +55,19 @@ export function isTransient(e: unknown) {
   return ["ECONNECTION", "ETIMEDOUT", "ESOCKET", "EDNS", "ECONNRESET"].includes(err.code ?? "") || /greeting|try again/i.test(err.message ?? "");
 }
 
+/**
+ * The same email to the same person about the same thing is sent at most once in this window, whatever asks
+ * for it: a double-clicked admin resend, repeated sign-in attempts re-sending the verification link, one
+ * address typed into the contact form over and over. Long enough to stop a burst, short enough that a real
+ * "send it again" works shortly after.
+ */
+export const REPEAT_WINDOW_MS = 2 * 60_000; // ponytail: per-email cooldown only; add a daily cap per address if the log shows abuse
+
+/** Resends count as the email they repeat: order.confirmed.resend and order.confirmed share a key. */
+export const repeatKinds = (kind: string) => {
+  const base = kind.replace(/\.resend$/, "");
+  return [base, `${base}.resend`];
+};
+
 /** The bare address out of `Name <address>` (or the string itself). */
 export const addressOf = (from: string) => from.match(/<([^>]+)>/)?.[1] ?? from.trim();

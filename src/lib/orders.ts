@@ -7,7 +7,7 @@ import type Stripe from "stripe";
 import { db } from "@/db";
 import { orderItems, orders, productImages, user } from "@/db/schema";
 import type { Bag } from "@/lib/cart-rules";
-import { sendEmail, siteUrl } from "@/lib/email";
+import { sendEmail, siteUrl, type SendResult } from "@/lib/email";
 import { newOrderAdminEmail, orderEmail, type OrderEmailKind } from "@/lib/emails/templates";
 import { nextStatus, type CheckoutEvent, type OrderStatus } from "@/lib/order-rules";
 
@@ -246,14 +246,15 @@ async function loadOrder(where: SQL) {
  * returned a row, so each email goes once. Never throws: a mail failure must not fail the webhook
  * (Stripe would retry) or an admin action that has already been saved.
  */
-export async function notifyCustomer(orderId: string, kind: OrderEmailKind, resend = false) {
+export async function notifyCustomer(orderId: string, kind: OrderEmailKind, resend = false): Promise<SendResult | null> {
   try {
     const order = await getOrder(orderId);
-    if (!order) return;
+    if (!order) return null;
     const mail = orderEmail(siteUrl(), order, kind, order.accountName, resend);
-    await sendEmail({ ...mail, to: order.customerEmail ?? order.accountEmail, kind: `order.${kind}`, ref: order.id });
+    return await sendEmail({ ...mail, to: order.customerEmail ?? order.accountEmail, kind: `order.${kind}${resend ? ".resend" : ""}`, ref: order.id });
   } catch (e) {
     console.error(`[order email] ${kind} for ${orderId} failed:`, e);
+    return "failed";
   }
 }
 

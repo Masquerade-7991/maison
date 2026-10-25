@@ -1,7 +1,7 @@
 // Run: node src/lib/emails/rules.check.mjs  (Node 23+ strips the TS types)
 import assert from "node:assert/strict";
 import { emailImage, esc, renderEmail } from "./layout.ts";
-import { addressOf, isSuppressed, isTransient, orderSubject, orderThreadHeaders, trackingUrl } from "./rules.ts";
+import { addressOf, isSuppressed, isTransient, orderSubject, orderThreadHeaders, repeatKinds, trackingUrl } from "./rules.ts";
 
 // Threading: the confirmation is the root; later emails reply to it with their own unique id.
 const root = orderThreadHeaders("abc", "confirmed", "shop.test");
@@ -64,5 +64,9 @@ assert.match(e.html, /font-family:'Helvetica Neue'/, "the font stack reaches the
 // A port isn't valid in a Message-ID (Gmail then ignores it and the thread breaks): it is dropped.
 assert.equal(orderThreadHeaders("abc", "confirmed", "localhost:3100")["Message-ID"], "<order.abc.confirmed@localhost>");
 assert.equal(orderThreadHeaders("abc", "delivered", "localhost:3100", false, "9")["In-Reply-To"], "<order.abc.confirmed@localhost>");
+
+// A resend and the email it repeats share one repeat key.
+assert.deepEqual(repeatKinds("order.confirmed"), ["order.confirmed", "order.confirmed.resend"]);
+assert.deepEqual(repeatKinds("order.confirmed.resend"), ["order.confirmed", "order.confirmed.resend"]);
 
 console.log("email rules checks passed");

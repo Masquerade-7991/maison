@@ -26,9 +26,9 @@ export async function sendContactAction(_prev: ContactState, fd: FormData): Prom
   const to = process.env.CONTACT_TO;
   const message = contactMessageEmail(siteUrl(), { name, email, topic, orderRef, message: parsed.value.message });
   if (to) {
-    const status = await sendEmail({ ...message, to, replyTo: email, kind: "contact.message" });
+    const status = await sendEmail({ ...message, to, replyTo: email, kind: "contact.message", ref: email });
     if (status === "failed") return { error: "We couldn't send your message just now. Please try again in a moment.", values: formValues(fd) };
   } else console.info(`[contact] CONTACT_TO is not set; message logged instead\n${message.subject}\n${message.text}`);
-  await sendEmail({ ...contactAckEmail(siteUrl(), name, topic, orderRef), to: email, kind: "contact.ack" });
+  await sendEmail({ ...contactAckEmail(siteUrl(), name, topic, orderRef), to: email, kind: "contact.ack", ref: email });
   return { sent: true, name };
 }

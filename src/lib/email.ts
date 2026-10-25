@@ -7,12 +7,14 @@
 // server), or when SMTP_URL is missing in development or on a deployment with EMAIL_LINKS_ON_PAGE=true
 // (the sign-up page then shows the verification link itself, src/lib/dev-email-actions.ts). Test addresses
 // (example.com) are never mailed. A temporary refusal (Gmail's "server busy", a dropped connection) is
-// retried twice. Every email is recorded in email_log. sendEmail never throws: an email must not fail a
+// retried twice. The same email to the same person about the same thing goes at most once every
+// REPEAT_WINDOW_MS (recorded as skipped). Every email is recorded in email_log. sendEmail never throws: an email must not fail a
 // payment webhook or an admin save that has already happened.
 import nodemailer, { type Transporter } from "nodemailer";
+import { and, eq, gt, inArray, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { emailLog } from "@/db/schema";
-import { isSuppressed, isTransient } from "@/lib/emails/rules";
+import { isSuppressed, isTransient, REPEAT_WINDOW_MS, repeatKinds } from "@/lib/emails/rules";
 
 export const emailIsOff = () =>
   process.env.EMAIL_OFF === "true" ||
@@ -34,14 +36,37 @@ export type OutgoingEmail = {
   replyTo?: string;
 };
 
-export type SendResult = "sent" | "failed" | "logged";
+export type SendResult = "sent" | "failed" | "logged" | "skipped";
 
 const RETRY_DELAYS = [2_000, 5_000]; // for isTransient errors, e.g. Gmail's "server busy"
+
+/** Was the same email sent to the same person about the same thing within the repeat window? Failures don't count. */
+async function sentRecently(mail: OutgoingEmail) {
+  const [row] = await db
+    .select({ id: emailLog.id })
+    .from(emailLog)
+    .where(
+      and(
+        sql`${emailLog.ref} is not distinct from ${mail.ref ?? null}`,
+        eq(emailLog.recipient, mail.to),
+        inArray(emailLog.kind, repeatKinds(mail.kind)),
+        ne(emailLog.status, "failed"),
+        ne(emailLog.status, "skipped"),
+        gt(emailLog.createdAt, new Date(Date.now() - REPEAT_WINDOW_MS)),
+      ),
+    )
+    .limit(1)
+    .catch(() => []); // can't check: send rather than lose the email
+  return Boolean(row);
+}
 
 export async function sendEmail(mail: OutgoingEmail): Promise<SendResult> {
   let status: SendResult;
   let error: string | null = null;
-  if (emailIsOff() || isSuppressed(mail.to)) {
+  if (await sentRecently(mail)) {
+    console.info(`[email] ${mail.kind} to ${mail.to} skipped: already sent in the last ${REPEAT_WINDOW_MS / 60_000} minutes`);
+    status = "skipped";
+  } else if (emailIsOff() || isSuppressed(mail.to)) {
     console.info(`[email] ${mail.kind} to ${mail.to} | ${mail.subject}\n${mail.text}`);
     status = "logged";
   } else {

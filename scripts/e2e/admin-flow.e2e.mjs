@@ -160,6 +160,23 @@ try {
   }
   pass(`orders list and ${ref}'s page show the customer, Confirmed (paid), the item, $150, the address and fulfilment`);
 
+  // Resend asks first, and a second resend within 2 minutes is skipped (one click, at most one email).
+  const resend = admin.locator("form", { hasText: "Resend" });
+  await admin.waitForLoadState("networkidle"); // hydrated, so the confirm dialog runs
+  for (let i = 0; i < 2; i++) {
+    admin.once("dialog", (d) => d.accept());
+    await resend.getByRole("button", { name: "confirmed" }).click();
+    await resend.getByRole("status").filter({ hasText: /confirmed:/i }).waitFor();
+    await admin.waitForTimeout(300);
+  }
+  assert.match(await resend.getByRole("status").innerText(), /not sent/i, "the second resend is skipped");
+  const mails = json(db("emails", CUSTOMER)).filter((m) => m.kind.startsWith("order.confirmed"));
+  assert.equal(mails.filter((m) => m.status !== "skipped").length, mails.some((m) => m.kind.endsWith(".resend") && m.status !== "skipped") ? 2 : 1, `confirmations: ${JSON.stringify(mails)}`);
+  assert.deepEqual(mails.at(-1), { kind: "order.confirmed.resend", status: "skipped" });
+  await admin.reload();
+  assert.match(await admin.locator("main").innerText(), /confirmed \(resent\)/i, "the email list marks resends");
+  pass(`resending the confirmation twice sends at most one email: ${mails.map((m) => `${m.kind} ${m.status}`).join(", ")}`);
+
   // Record the fulfilment and role actions without changing anything (both are refused by validation).
   await admin.getByRole("button", { name: "Mark as shipped" }).click();
   await admin.getByText("Enter the carrier.").waitFor();

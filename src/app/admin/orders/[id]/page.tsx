@@ -2,10 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { FulfilmentForm } from "@/components/admin/fulfilment-form";
+import { ResendEmail } from "@/components/admin/resend-email";
 import { OrderDetails } from "@/components/order-details";
 import { emailLogFor } from "@/lib/admin-emails";
 import { getAdminOrder } from "@/lib/admin-orders";
-import { resendEmailAction } from "../actions";
 import { isUuid } from "@/lib/admin-rules";
 import { formatMoney } from "@/lib/format";
 import { marketById, toUsdCents } from "@/lib/markets";
@@ -95,26 +95,16 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
           <ul className="mt-2">
             {log.map((e) => (
               <li key={e.id} className="flex flex-wrap justify-between gap-x-6 gap-y-1 border-b border-line py-3">
-                <span>{e.kind.replace(/^order\./, "").replace("_", " ")}</span>
+                <span>{e.kind.replace(/^order\./, "").replace("_", " ").replace(/\.resend$/, " (resent)")}</span>
                 <span className="text-muted">
-                  {e.status === "sent" ? "Sent" : e.status === "logged" ? "Logged only (email off or test address)" : `Failed: ${e.error ?? "unknown error"}`} ·{" "}
+                  {e.status === "sent" ? "Sent" : e.status === "logged" ? "Logged only (email off or test address)" : e.status === "skipped" ? "Not sent (already sent minutes before)" : `Failed: ${e.error ?? "unknown error"}`} ·{" "}
                   {date.format(e.createdAt)}
                 </span>
               </li>
             ))}
           </ul>
         )}
-        {resendable.length > 0 && (
-          <form action={resendEmailAction} className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3">
-            <input type="hidden" name="id" value={order.id} />
-            <span className="label text-muted">Resend</span>
-            {resendable.map((k) => (
-              <button key={k} type="submit" name="kind" value={k} className="label link cursor-pointer">
-                {k}
-              </button>
-            ))}
-          </form>
-        )}
+        {resendable.length > 0 && <ResendEmail orderId={order.id} kinds={resendable} />}
       </section>
     </>
   );
