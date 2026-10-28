@@ -49,6 +49,7 @@ Change an event: update the catalogue, this table and its changelog, and `script
 - **Sign-in:** `identify(account id, { email })`, then `setFirstName` and the `market` attribute. The SDK keeps the customer in memory only, so this repeats on every page load while signed in.
 - **Sign-out and account deletion:** `logout(user)`. If this page hadn't identified the customer yet, it identifies first, so Helo always receives the logout.
 - **Another customer on the same page:** `reset()`, then identify.
+- **Each page load identifies at once:** the browser keeps the last identified customer (`maison-helo-customer`), so no event waits on the server's session check. That check then confirms the customer, switches to another one, or logs out an expired session. The key is removed on sign-out and Decline.
 
 ## Funnels
 
@@ -63,6 +64,6 @@ Change an event: update the catalogue, this table and its changelog, and `script
 
 ## Changelog
 
-- **2026-10-29:** A signed-in customer's events were sent as "unknown". On each fresh page load the first events went out before `identify` finished. Events now wait (at most 4 seconds) until the page knows who is signed in.
+- **2026-10-29:** A signed-in customer's events were sent as "unknown". On each fresh page load the first events went out before `identify` finished. Events now wait (at most 8 seconds) until the page knows who is signed in. The browser remembers the last identified customer so each page identifies at once, without waiting for the server's session check (slow when cold); that check still corrects it.
 - **2026-10-28 (audit fixes):** Decline keeps wiping what the live SDK re-saves, and unconsented loads wipe before anything starts. Purchases are claimed only by a working SDK, a failed claim stays claimable, late purchases are limited to 7 days and never cancelled, and the orders list sends item slugs. "Signed Out" is sent from `logout()` after identifying. "Account Deletion Cancelled" fires only when one was cancelled. The person-name keys are blocked, and the privacy note now covers search terms and the UPI city and state.
 - **2026-10-28:** First release: 25 events. Purchases are claimed server-side (`orders.analytics_charged_at`). The race fixes cover identify/logout ordering, account switches, consent across tabs, Decline wiping SDK storage, back/forward cache, dev double effects, and flushing before checkout and market changes.

@@ -127,6 +127,22 @@ try {
   await until(() => a.named("Charged").length === 2, "the missed purchase, sent from the orders list");
   pass("a purchase whose confirmation page sent nothing is sent once from the orders list");
 
+  // A slow session check (a cold server takes seconds): the page's events still belong to the customer.
+  const slow = async (route) => {
+    await new Promise((r) => setTimeout(r, 10000));
+    await route.continue().catch(() => {});
+  };
+  await a.ctx.route("**/api/auth/get-session**", slow);
+  const viewedBefore = a.named("Product Viewed").length;
+  await page.goto(`${BASE}/products/${SLUG}`);
+  await page.waitForTimeout(3000);
+  await page.goto(`${BASE}/women`); // leave before the session check answers
+  await until(() => a.named("Product Viewed").length > viewedBefore, "Product Viewed from the slow page");
+  await a.ctx.unroute("**/api/auth/get-session**", slow);
+  const slowView = a.named("Product Viewed").at(-1);
+  assert.equal(slowView.customer_id, idA.customer_id, "events on a page whose session check is slow are still the customer's");
+  pass("session check slowed to 10 s: the page's events still carry the signed-in customer");
+
   // ── Sign-out straight after a page load still reaches Helo ───────────────────────────────────────
   await page.goto(`${BASE}/account`);
   await page.getByRole("button", { name: "Sign out" }).click(); // no pause: the page may not have identified yet

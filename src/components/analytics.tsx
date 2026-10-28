@@ -4,7 +4,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useSyncExternalStore } from "react";
 import { claimChargedEvent } from "@/lib/analytics-actions";
 import type { AnalyticsEvents, EventName } from "@/lib/analytics-events";
-import { analyticsAvailable, getConsent, identify, identityKnown, subscribeConsent, track, trackCharged, trackPageView } from "@/lib/analytics";
+import { analyticsAvailable, getConsent, identify, identityKnown, logout, rememberedCustomer, subscribeConsent, track, trackCharged, trackPageView } from "@/lib/analytics";
 import { authClient } from "@/lib/auth-client";
 import { MARKET_COOKIE } from "@/lib/markets";
 
@@ -46,9 +46,20 @@ function PageViews() {
   }, []);
 
   useEffect(() => {
-    if (!consented || isPending) return;
+    if (!consented) return;
+    if (isPending) {
+      // The session check is still running (slow when cold): identify whoever this browser last identified.
+      const known = rememberedCustomer();
+      if (known) identify(known, market());
+      return;
+    }
     if (user) identify({ id: user.id, email: user.email, name: user.name }, market());
-    else identityKnown(); // signed out: the page's events can go now
+    else {
+      // Signed out after all (e.g. the session expired): log out the remembered customer, then send.
+      const known = rememberedCustomer();
+      if (known) void logout(known);
+      identityKnown();
+    }
   }, [consented, isPending, user]);
 
   return null;

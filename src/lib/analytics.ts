@@ -80,10 +80,31 @@ function ready(): Promise<HeloSDK | null> | null {
 // with the customer it knows at that moment, and on a fresh page load identify() only lands after the first
 // page view, which would leave a signed-in customer's events "unknown". Released by identify() once Helo
 // acknowledges the customer, or by identityKnown() when nobody is signed in.
-const IDENTITY_WAIT_MS = 4000;
+const IDENTITY_WAIT_MS = 8000; // a cold session check on the server can take several seconds
 let releaseIdentity: () => void = () => {};
 let identityGate = new Promise<void>((r) => (releaseIdentity = r));
 const identityResolved = () => Promise.race([identityGate, new Promise<void>((r) => setTimeout(r, IDENTITY_WAIT_MS))]);
+
+// The customer this browser last identified, so the next page load identifies at once instead of waiting
+// for the server's session check (slow when cold). The session check still confirms or corrects it.
+const KNOWN_CUSTOMER = "maison-helo-customer";
+
+function rememberCustomer(user: User | null) {
+  try {
+    if (user) localStorage.setItem(KNOWN_CUSTOMER, JSON.stringify({ id: user.id, email: user.email, name: user.name }));
+    else localStorage.removeItem(KNOWN_CUSTOMER);
+  } catch {}
+}
+
+/** Who this browser last identified, if anyone (cleared on sign-out and Decline). */
+export function rememberedCustomer(): User | null {
+  try {
+    const u = JSON.parse(localStorage.getItem(KNOWN_CUSTOMER) ?? "null");
+    return u && typeof u.id === "string" && typeof u.email === "string" ? { id: u.id, email: u.email, name: String(u.name ?? "") } : null;
+  } catch {
+    return null;
+  }
+}
 
 /** Nobody is signed in on this page (the session check finished): events needn't wait. */
 export function identityKnown() {
@@ -172,6 +193,7 @@ export function identify(user: User, market: string) {
         return;
       }
       confirmed = user.id;
+      rememberCustomer(user);
       releaseIdentity(); // the waiting events now carry the customer
       if (gen !== generation) return;
       await s.setFirstName(user.name.split(" ")[0] || null);
@@ -195,6 +217,7 @@ export function signedIn() {
  */
 export async function logout(user?: User | null, event?: "Signed Out") {
   generation++;
+  rememberCustomer(null);
   signedOut = user?.id ?? confirmed ?? requested;
   requested = null;
   const s = await ready();
@@ -233,6 +256,7 @@ function applyConsent(granted: boolean) {
   } else {
     generation++;
     requested = confirmed = null;
+    rememberCustomer(null);
     lastView = null;
     if (sdk && !declinedLive) {
       declinedLive = true;
@@ -273,6 +297,9 @@ if (typeof window !== "undefined") {
     sessionStorage.removeItem(WIPE_ON_LOAD);
   } catch {}
   if (wipe) wipeSdkStorage();
+  // Leaving before identity resolved: let the held events into the SDK (it saves them as the page goes),
+  // unattributed rather than lost.
+  window.addEventListener("pagehide", () => releaseIdentity());
   window.addEventListener("storage", (e) => {
     if (e.key === CONSENT_SYNC && e.newValue) applyConsent(e.newValue.startsWith("granted"));
   });
