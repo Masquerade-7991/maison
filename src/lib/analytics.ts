@@ -76,9 +76,24 @@ function ready(): Promise<HeloSDK | null> | null {
   return sdk;
 }
 
+// Events wait (at most IDENTITY_WAIT_MS) until the page knows who is signed in: the SDK stamps each event
+// with the customer it knows at that moment, and on a fresh page load identify() only lands after the first
+// page view, which would leave a signed-in customer's events "unknown". Released by identify() once Helo
+// acknowledges the customer, or by identityKnown() when nobody is signed in.
+const IDENTITY_WAIT_MS = 4000;
+let releaseIdentity: () => void = () => {};
+let identityGate = new Promise<void>((r) => (releaseIdentity = r));
+const identityResolved = () => Promise.race([identityGate, new Promise<void>((r) => setTimeout(r, IDENTITY_WAIT_MS))]);
+
+/** Nobody is signed in on this page (the session check finished): events needn't wait. */
+export function identityKnown() {
+  releaseIdentity();
+}
+
 function run(fn: (s: HeloSDK) => unknown) {
-  void ready()?.then((s) => {
+  void ready()?.then(async (s) => {
     if (!s) return;
+    await identityResolved();
     try {
       void Promise.resolve(fn(s)).catch(() => {});
     } catch {
@@ -157,16 +172,20 @@ export function identify(user: User, market: string) {
         return;
       }
       confirmed = user.id;
+      releaseIdentity(); // the waiting events now carry the customer
       if (gen !== generation) return;
       await s.setFirstName(user.name.split(" ")[0] || null);
       if (gen === generation) await s.setUserAttribute("market", market);
     })
-    .catch(() => {});
+    .catch(() => {})
+    .finally(() => releaseIdentity()); // failed or superseded: don't hold events any longer
 }
 
 /** A successful sign-in on this page lifts the guard left by an earlier sign-out. */
 export function signedIn() {
   signedOut = null;
+  // The next events wait for this customer's identify, as on a fresh page load.
+  identityGate = new Promise<void>((r) => (releaseIdentity = r));
 }
 
 /**

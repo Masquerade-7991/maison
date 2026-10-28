@@ -91,6 +91,9 @@ try {
   const charged = a.named("Charged")[0];
   assert.ok(charged.properties.amount > 0 && /^[A-Z]{3}$/.test(charged.properties.currency), `Charged ${JSON.stringify(charged.properties)}`);
   assert.ok(charged.customer_id, "Charged belongs to the identified customer");
+  // Signed in from the start: every event, including the first ones on each fresh page load, is theirs.
+  const anonymous = a.events().filter((e) => e.customer_id !== idA.customer_id).map((e) => e.event_name);
+  assert.deepEqual(anonymous, [], `events sent without the signed-in customer: ${anonymous.join(", ")}`);
   const batch = a.calls("/events/batch")[0].body;
   assert.ok(batch.context?.anonymous_id && batch.context?.session_id, "batches carry the anonymous and session ids");
   for (const e of a.events()) for (const k of Object.keys(e.properties ?? {})) assert.ok(!/email|phone|address|message/i.test(k), `no personal key "${k}" in ${e.event_name}`);

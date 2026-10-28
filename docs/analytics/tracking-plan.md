@@ -63,5 +63,6 @@ Change an event: update the catalogue, this table and its changelog, and `script
 
 ## Changelog
 
+- **2026-10-29:** A signed-in customer's events were sent as "unknown". On each fresh page load the first events went out before `identify` finished. Events now wait (at most 4 seconds) until the page knows who is signed in.
 - **2026-10-28 (audit fixes):** Decline keeps wiping what the live SDK re-saves, and unconsented loads wipe before anything starts. Purchases are claimed only by a working SDK, a failed claim stays claimable, late purchases are limited to 7 days and never cancelled, and the orders list sends item slugs. "Signed Out" is sent from `logout()` after identifying. "Account Deletion Cancelled" fires only when one was cancelled. The person-name keys are blocked, and the privacy note now covers search terms and the UPI city and state.
 - **2026-10-28:** First release: 25 events. Purchases are claimed server-side (`orders.analytics_charged_at`). The race fixes cover identify/logout ordering, account switches, consent across tabs, Decline wiping SDK storage, back/forward cache, dev double effects, and flushing before checkout and market changes.

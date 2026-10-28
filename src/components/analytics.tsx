@@ -4,7 +4,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useSyncExternalStore } from "react";
 import { claimChargedEvent } from "@/lib/analytics-actions";
 import type { AnalyticsEvents, EventName } from "@/lib/analytics-events";
-import { analyticsAvailable, getConsent, identify, subscribeConsent, track, trackCharged, trackPageView } from "@/lib/analytics";
+import { analyticsAvailable, getConsent, identify, identityKnown, subscribeConsent, track, trackCharged, trackPageView } from "@/lib/analytics";
 import { authClient } from "@/lib/auth-client";
 import { MARKET_COOKIE } from "@/lib/markets";
 
@@ -28,7 +28,7 @@ function PageViews() {
   const consented = useConsented();
   const pathname = usePathname();
   const search = useSearchParams().toString();
-  const { data } = authClient.useSession();
+  const { data, isPending } = authClient.useSession();
   const user = data?.user;
   const target = search ? `${pathname}?${search}` : pathname;
 
@@ -46,8 +46,10 @@ function PageViews() {
   }, []);
 
   useEffect(() => {
-    if (consented && user) identify({ id: user.id, email: user.email, name: user.name }, market());
-  }, [consented, user]);
+    if (!consented || isPending) return;
+    if (user) identify({ id: user.id, email: user.email, name: user.name }, market());
+    else identityKnown(); // signed out: the page's events can go now
+  }, [consented, isPending, user]);
 
   return null;
 }
