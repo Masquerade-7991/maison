@@ -77,6 +77,13 @@ try {
   const idA = a.calls("/identify")[0].body.traits;
   assert.equal(idA.email, A, "identify carries the account email");
   assert.ok(idA.customer_id && idA.customer_id !== A, "identified by the account id, not the email");
+  // Helo's profile page reads profile fields, so the email and name must arrive there too.
+  await until(() => a.calls("/profile").some((c) => c.body.attributes?.last_name !== undefined), "the profile fields");
+  const profile = Object.assign({}, ...a.calls("/profile").map((c) => c.body.attributes));
+  assert.equal(profile.email, A, "profile email");
+  assert.equal(profile.first_name, "QA", "profile first name");
+  assert.equal(profile.last_name, "Test", "profile last name");
+  assert.ok(a.calls("/profile").every((c) => c.body.context?.customer_id === idA.customer_id), "profile writes belong to the customer");
   await page.goto(`${BASE}/products/${SLUG}`);
   const add = page.getByRole("button", { name: "Add to bag" });
   await add.dblclick(); // a fast double click: one event per add the server confirms

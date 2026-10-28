@@ -157,11 +157,13 @@ export default function AboutPage() {
             If you accept analytics, we record how the site is used: the pages and pieces you view, what you search
             for, what goes into your bag, checkout steps (for UPI, the city and state you deliver to) and completed
             orders, with the amount and currency. It is processed for us by Helo
-            (helo.ai) to improve Maison. When you are signed in, these are linked to your account, with your email and
-            first name.
+            (helo.ai) to improve Maison. When you are signed in, these are linked to your account, and your Helo profile
+            holds your name, email, the mobile number from your latest delivery details, and an approximate location
+            worked out from your internet connection (city level).
           </p>
           <p>
-            We never record your street address, phone number, card or UPI details, or the messages you send us. Decline, or
+            We never record your street address, card or UPI details, or the messages you send us, and none of
+            these personal details are attached to individual events. Decline, or
             change your answer at any time from &ldquo;Cookie preferences&rdquo; at the foot of every page, and nothing
             more is recorded.
           </p>

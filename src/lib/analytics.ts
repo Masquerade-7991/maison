@@ -11,6 +11,7 @@
 // SDK only logs out a customer it identified on this page load); a different customer resets first; a
 // purchase is claimed on the server before Charged is sent, so tabs, devices and reloads count it once.
 import type { HeloSDK } from "helo-sdk";
+import { analyticsProfileFacts } from "@/lib/analytics-actions";
 import { cleanProps, validEventName, type AnalyticsEvents, type EventName } from "@/lib/analytics-events";
 
 const API_KEY = process.env.NEXT_PUBLIC_HELO_API_KEY;
@@ -195,12 +196,40 @@ export function identify(user: User, market: string) {
       confirmed = user.id;
       rememberCustomer(user);
       releaseIdentity(); // the waiting events now carry the customer
-      if (gen !== generation) return;
-      await s.setFirstName(user.name.split(" ")[0] || null);
-      if (gen === generation) await s.setUserAttribute("market", market);
+      await fillProfile(s, user, market, gen);
     })
     .catch(() => {})
     .finally(() => releaseIdentity()); // failed or superseded: don't hold events any longer
+}
+
+/**
+ * The customer's Helo profile, through the SDK's own setters: Helo's profile page reads Email ID, Mobile
+ * number, Location and the name from these profile fields, not from identify's traits. Sent once per
+ * customer per tab session (the facts lookup is a server round trip); every step stops if the customer
+ * signed out meanwhile.
+ */
+async function fillProfile(s: HeloSDK, user: User, market: string, gen: number) {
+  const key = `maison-helo-profile:${user.id}`;
+  try {
+    if (sessionStorage.getItem(key)) return;
+  } catch {}
+  const [first, ...rest] = user.name.trim().split(/\s+/);
+  const steps: (() => Promise<unknown>)[] = [
+    () => s.setEmail(user.email),
+    () => s.setFirstName(first || null),
+    () => s.setLastName(rest.join(" ") || null),
+    () => s.setUserAttribute("market", market),
+  ];
+  const facts = await analyticsProfileFacts().catch(() => null);
+  if (facts?.phone) steps.push(() => s.setMobileNumber(facts.phone!));
+  if (facts?.latitude != null && facts.longitude != null) steps.push(() => s.setUserAttributeLocation(facts.latitude!, facts.longitude!));
+  for (const step of steps) {
+    if (gen !== generation) return;
+    await step();
+  }
+  try {
+    sessionStorage.setItem(key, "1");
+  } catch {}
 }
 
 /** A successful sign-in on this page lifts the guard left by an earlier sign-out. */
