@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { TrackEvent } from "@/components/analytics";
 import { ProductCard } from "@/components/product-card";
 import { StoryCard } from "@/components/story-card";
 import { DEFAULT_MARKET } from "@/lib/markets";
@@ -37,6 +38,7 @@ export default async function StoryPage({ params }: PageProps<"/[market]/stories
 
   return (
     <article>
+      <TrackEvent name="Story Read" properties={{ story: s.slug, topic: s.topic }} />
       <header className="container-page pt-6 md:pt-10">
         <nav aria-label="Breadcrumb">
           <ol className="label flex flex-wrap gap-2 text-muted">

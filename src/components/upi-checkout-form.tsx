@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState, useState, useTransition } from "react";
 import { Field, Section, Spinner } from "@/components/admin/form-parts";
 import { INDIAN_STATES, type AddressField } from "@/lib/address-rules";
+import { track } from "@/lib/analytics";
 import { startUpiCheckoutAction, type UpiCheckoutState } from "@/lib/checkout-actions";
 import { orderReference } from "@/lib/order-rules";
 
@@ -77,7 +78,12 @@ export function UpiCheckoutForm({ defaults }: { defaults: Partial<Record<Address
 
   const pay = async (c: Checkout) => {
     setDismissed(false);
-    setLoadError(await openRazorpay(c, () => setDismissed(true)));
+    setLoadError(
+      await openRazorpay(c, () => {
+        setDismissed(true);
+        track("Payment Window Closed", { gateway: "razorpay", order_ref: orderReference(c.orderId) });
+      }),
+    );
   };
 
   // `round` counts server replies: React 19 resets the form after each action and restores inputs from
@@ -85,7 +91,10 @@ export function UpiCheckoutForm({ defaults }: { defaults: Partial<Record<Address
   const [state, formAction, pending] = useActionState(
     async (prev: (UpiCheckoutState & { round?: number }) | null, fd: FormData) => {
       const next = await startUpiCheckoutAction(prev, fd);
-      if (next?.checkout) await pay(next.checkout); // still pending while checkout.js loads
+      if (next?.checkout) {
+        track("Delivery Details Submitted", { state: String(fd.get("state")), city: String(fd.get("city")).trim() });
+        await pay(next.checkout); // still pending while checkout.js loads
+      }
       return next && { ...next, round: (prev?.round ?? 0) + 1 };
     },
     null,

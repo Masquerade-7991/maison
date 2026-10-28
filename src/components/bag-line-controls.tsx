@@ -2,7 +2,8 @@
 
 import { useActionState, useEffect, useRef } from "react";
 import { useFormStatus } from "react-dom";
-import { removeFromBagAction, updateQuantityAction } from "@/lib/cart-actions";
+import { track } from "@/lib/analytics";
+import { removeFromBagAction, updateQuantityAction, type BagActionState } from "@/lib/cart-actions";
 import { announceBagChange, type BagIssue } from "@/lib/cart-rules";
 
 type Props = { slug: string; size: string; quantity: number; max: number; name: string; issue: BagIssue };
@@ -10,7 +11,11 @@ type Props = { slug: string; size: string; quantity: number; max: number; name: 
 // − quantity + stepper and Remove for one bag line. Each button posts the quantity it would set;
 // the server re-checks stock either way, `max` only decides which buttons are offered.
 export function BagLineControls({ slug, size, quantity, max, name, issue }: Props) {
-  const [state, action, pending] = useActionState(updateQuantityAction, null);
+  const [state, action, pending] = useActionState(async (prev: BagActionState, fd: FormData) => {
+    const next = await updateQuantityAction(prev, fd);
+    if (next?.ok) track("Bag Quantity Changed", { product_id: slug, size: size || null, qty: Number(fd.get("quantity")) });
+    return next;
+  }, null);
   useEffect(() => {
     if (state?.ok) announceBagChange(); // the header's "Bag (n)"
   }, [state]);
@@ -48,7 +53,12 @@ export function BagLineControls({ slug, size, quantity, max, name, issue }: Prop
           </form>
         )}
 
-        <form action={removeFromBagAction}>
+        <form
+          action={async (fd) => {
+            await removeFromBagAction(fd);
+            track("Product Removed", { product_id: slug, size: size || null });
+          }}
+        >
           <input type="hidden" name="slug" value={slug} />
           <input type="hidden" name="size" value={size} />
           <RemoveButton label={label} emphasise={issue === "sold_out"} />

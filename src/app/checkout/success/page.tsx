@@ -3,8 +3,10 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type Stripe from "stripe";
+import { TrackCharged, TrackEvent } from "@/components/analytics";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { OrderDelivery, OrderTotals } from "@/components/order-details";
+import { toMajor } from "@/lib/analytics-events";
 import { emailIsOff } from "@/lib/email";
 import { formatMoney } from "@/lib/format";
 import { applyCheckoutSession, getOrderForUser, syncRazorpayOrder } from "@/lib/orders";
@@ -105,6 +107,25 @@ export default async function CheckoutSuccessPage({ searchParams }: PageProps<"/
 
   return (
     <section className="container-page py-6 md:py-10">
+      {paid ? (
+        <TrackCharged
+          order={{
+            order_id: reference,
+            gateway: order.provider,
+            method: upi ? "upi" : "card",
+            total: toMajor(order.amountTotalCents ?? order.subtotalCents, order.currency),
+            currency: order.currency,
+            market: order.market,
+            items_count: pieces,
+            transaction: true,
+          }}
+          items={order.items.map((i) => i.slug)}
+        />
+      ) : order.status === "payment_failed" ? (
+        <TrackEvent name="Payment Failed" properties={{ gateway: order.provider, order_ref: reference }} />
+      ) : order.status === "expired" ? (
+        <TrackEvent name="Order Expired" properties={{ gateway: order.provider, order_ref: reference }} />
+      ) : null}
       <div className="grid grid-cols-1 items-start gap-10 lg:grid-cols-12 lg:gap-14">
         {/* Left: the moment. A raised panel in the page's own theme, beside the order on desktop. */}
         <div className="lg:sticky lg:top-[calc(var(--spacing-header)+1.5rem)] lg:col-span-7">

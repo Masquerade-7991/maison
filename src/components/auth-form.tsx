@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { flushSync } from "react-dom";
+import { track } from "@/lib/analytics";
 import { authClient } from "@/lib/auth-client";
 import { getDevVerificationLink } from "@/lib/dev-email-actions";
 import {
@@ -79,6 +80,7 @@ export function AuthForm({ mode, next }: { mode: AuthMode; next: string }) {
         mode === "sign-up"
           ? await authClient.signUp.email({ name: values.name.trim(), email: values.email, password: values.password, callbackURL })
           : await authClient.signIn.email({ email: values.email, password: values.password, callbackURL });
+      if (!error) track(mode === "sign-up" ? "Signed Up" : "Signed In", { method: "email" });
 
       if (!error && mode === "sign-in") {
         router.replace(next);

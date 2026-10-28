@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
+import { track } from "@/lib/analytics";
 import { stockAlertAction } from "@/lib/alert-actions";
 
 /**
@@ -10,6 +11,9 @@ import { stockAlertAction } from "@/lib/alert-actions";
  */
 export function StockAlert({ slug }: { slug: string }) {
   const [state, action, pending] = useActionState(stockAlertAction, null);
+  useEffect(() => {
+    if (state && !state.signIn && !state.error) track(state.on ? "Back In Stock Requested" : "Alert Cancelled", { product_id: slug });
+  }, [state, slug]);
   const next = `/sign-in?next=${encodeURIComponent(`/products/${slug}`)}`;
 
   if (state?.signIn) {

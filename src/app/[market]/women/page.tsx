@@ -14,6 +14,7 @@ export default async function Page({ params, searchParams }: PageProps<"/[market
   const pricing = await getPricing(market);
   return (
     <ProductListing
+      list="women"
       title={title}
       intro={intro}
       products={products}

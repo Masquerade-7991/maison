@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { TrackEvent } from "@/components/analytics";
 import { Menu } from "@/components/menu";
 import { ProductCard } from "@/components/product-card";
 import type { Pricing } from "@/lib/fx";
@@ -44,6 +45,7 @@ function qs(current: Filters, patch: Partial<Filters>) {
 // Listing body shared by /women, /men, /gifts, /new-arrivals and /collections/[slug].
 // Filters live in the URL and run over the view's products (see filterProducts).
 export function ProductListing({
+  list,
   title,
   intro,
   products,
@@ -53,6 +55,8 @@ export function ProductListing({
   showNew = true,
   image,
 }: {
+  /** The view's name in analytics, e.g. "women" or "collections/bags". */
+  list: string;
   title: string;
   intro: string;
   products: Product[];
@@ -88,6 +92,16 @@ export function ProductListing({
 
   return (
     <>
+      <TrackEvent
+        name="Product List Viewed"
+        properties={{
+          list,
+          filters: qs({ ...filters, sort: undefined }, {}).slice(1),
+          sort: activeSort.slug,
+          result_count: results.length,
+          market: pricing.market.id,
+        }}
+      />
       {image && (
         <section className="relative h-[50svh] max-h-144 min-h-80 overflow-hidden bg-surface">
           <Image src={image.url} alt={image.alt} fill preload sizes="100vw" className="object-cover" />

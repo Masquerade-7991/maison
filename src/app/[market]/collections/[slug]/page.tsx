@@ -16,6 +16,7 @@ export default async function CollectionPage({ params, searchParams }: PageProps
 
   return (
     <ProductListing
+      list={`collections/${slug}`}
       title={category.name}
       intro={category.description}
       products={products}

@@ -24,13 +24,15 @@
     "e2e:markets": "node scripts/e2e/markets.e2e.mjs",
     "e2e:alerts": "node scripts/e2e/alerts.e2e.mjs",
     "e2e:account-deletion": "node scripts/e2e/account-deletion.e2e.mjs",
-    "e2e:upi": "node scripts/e2e/upi.e2e.mjs"
+    "e2e:upi": "node scripts/e2e/upi.e2e.mjs",
+    "e2e:analytics": "node scripts/e2e/analytics.e2e.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
     "better-auth": "^1.7.6",
     "drizzle-orm": "^0.45.3",
     "geist": "^1.8.1",
+    "helo-sdk": "^1.1.5",
     "next": "16.3.6",
     "nodemailer": "^10.2.1",
     "react": "19.2.8",

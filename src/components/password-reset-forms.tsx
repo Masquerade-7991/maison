@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { track } from "@/lib/analytics";
 import { authClient } from "@/lib/auth-client";
 import { PASSWORD_MAX, PASSWORD_MIN, validateField } from "@/lib/auth-validation";
 
@@ -33,6 +34,7 @@ export function ForgotPasswordForm() {
     const { error: failed } = await authClient.requestPasswordReset({ email, redirectTo: `${window.location.origin}/reset-password` });
     setPending(false);
     if (failed) return setFormError(failed.status === 429 ? "Too many requests. Please wait a few minutes and try again." : "Something went wrong. Please try again.");
+    track("Password Reset Requested", {});
     setSentTo(email);
   }
 

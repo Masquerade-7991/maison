@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
+import { TrackEvent } from "@/components/analytics";
 import { BagLineControls } from "@/components/bag-line-controls";
 import { CheckoutButton } from "@/components/checkout-button";
 import { ProductCard } from "@/components/product-card";
 import { UPI_MAX_PAISE, upiAllowed } from "@/lib/address-rules";
 import { getBag } from "@/lib/cart";
+import { toMajor } from "@/lib/analytics-events";
 import { lineTotalCents, type BagLine } from "@/lib/cart-rules";
 import { formatMoney } from "@/lib/format";
 import { getMarket } from "@/lib/market-server";
@@ -30,6 +32,7 @@ export default async function BagPage({ searchParams }: PageProps<"/bag">) {
   // UPI (Razorpay) is a second choice in India only, and only up to UPI's per-payment limit.
   const upiMarket = (await razorpayUpiReady()) && upiAllowed(market.id, bag.currency, UPI_MAX_PAISE);
   const upi = upiMarket && upiAllowed(market.id, bag.currency, bag.subtotalCents);
+  const value = toMajor(bag.subtotalCents, bag.currency);
   const delivery = `You'll add a delivery address in ${market.id === INTERNATIONAL ? "the United States" : market.name} next.`;
 
   return (
@@ -70,6 +73,10 @@ export default async function BagPage({ searchParams }: PageProps<"/bag">) {
         </>
       ) : (
         <div className="grid gap-12 lg:grid-cols-12 lg:gap-16">
+          <TrackEvent
+            name="Cart Viewed"
+            properties={{ items_count: bag.itemCount, value, currency: bag.currency, market: market.id, has_issues: bag.hasIssues }}
+          />
           <div className="lg:col-span-8">
             {cancelled && (
               <p role="status" className="mt-8 border-l-2 border-ink pl-4">
@@ -107,7 +114,11 @@ export default async function BagPage({ searchParams }: PageProps<"/bag">) {
                 </div>
               </dl>
               {bag.payableCount < bag.itemCount && <p className="mt-2 text-right text-muted">Excludes sold-out pieces.</p>}
-              <CheckoutButton blocked={bag.hasIssues} upi={upi} />
+              <CheckoutButton
+                blocked={bag.hasIssues}
+                upi={upi}
+                summary={{ value, currency: bag.currency, market: market.id, items: bag.lines.map((l) => l.slug) }}
+              />
               <p id="checkout-note" className="mt-3 text-center text-muted">
                 {bag.hasIssues
                   ? "Review the marked pieces before checking out."

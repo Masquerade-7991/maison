@@ -2,14 +2,21 @@
 
 import Link from "next/link";
 import { useActionState, useEffect } from "react";
-import { addToBagAction } from "@/lib/cart-actions";
+import { addToBagAction, type BagActionState } from "@/lib/cart-actions";
 import { StockAlert } from "@/components/stock-alert";
+import { track } from "@/lib/analytics";
+import { toMajor } from "@/lib/analytics-events";
 import { announceBagChange } from "@/lib/cart-rules";
 
 // Posts only the slug and the chosen size; price and stock are read on the server.
 // The product page stays static: the session is only read when the action runs.
-export function AddToBagForm({ slug, sizes, buyable }: { slug: string; sizes: string[]; buyable: boolean }) {
-  const [state, action, pending] = useActionState(addToBagAction, null);
+// `price` (minor units of `currency`), `currency` and `market` are only for analytics.
+export function AddToBagForm({ slug, sizes, buyable, price, currency, market }: { slug: string; sizes: string[]; buyable: boolean; price: number; currency: string; market: string }) {
+  const [state, action, pending] = useActionState(async (prev: BagActionState, fd: FormData) => {
+    const next = await addToBagAction(prev, fd);
+    if (next?.ok) track("Product Added", { product_id: slug, price: toMajor(price, currency), currency, market, size: (fd.get("size") as string | null) || null, qty: 1 });
+    return next;
+  }, null);
   useEffect(() => {
     if (state?.ok) announceBagChange(); // the header's "Bag (n)"
   }, [state]);

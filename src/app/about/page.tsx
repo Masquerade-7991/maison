@@ -147,6 +147,25 @@ export default function AboutPage() {
           </div>
         </div>
       </section>
+
+      {/* Privacy: what the consent banner asks about. */}
+      <section id="privacy" className="container-page section scroll-mt-24">
+        <p className="label text-muted">Privacy</p>
+        <h2 className="mt-4 text-display-sm">Analytics, only with your consent</h2>
+        <div className="mt-6 max-w-2xl space-y-4 text-muted">
+          <p>
+            If you accept analytics, we record how the site is used: the pages and pieces you view, what goes into your
+            bag, checkout steps and completed orders, with the amount and currency. It is processed for us by Helo
+            (helo.ai) to improve Maison. When you are signed in, these are linked to your account, with your email and
+            first name.
+          </p>
+          <p>
+            We never record your address, phone number, card or UPI details, or the messages you send us. Decline, or
+            change your answer at any time from &ldquo;Cookie preferences&rdquo; at the foot of every page, and nothing
+            more is recorded.
+          </p>
+        </div>
+      </section>
     </>
   );
 }

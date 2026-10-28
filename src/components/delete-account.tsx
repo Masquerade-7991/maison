@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useActionState, useRef, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
+import { logout, track } from "@/lib/analytics";
 import { announceBagChange } from "@/lib/cart-rules";
 import { requestDeletionAction } from "@/lib/account-actions";
 
@@ -16,8 +17,10 @@ const longDate = (d: Date) => new Intl.DateTimeFormat("en-GB", { dateStyle: "lon
 export function DeleteAccount({ email, blocked, days, estimate }: { email: string; blocked: string | null; days: number; estimate: string }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const router = useRouter();
+  const loggedOut = useRef<Promise<void>>(null);
   // Signed out on the server already: leave for the home page, and let the header forget the bag.
-  const leave = () => {
+  const leave = async () => {
+    await loggedOut.current;
     announceBagChange();
     router.replace("/");
     router.refresh();
@@ -26,6 +29,11 @@ export function DeleteAccount({ email, blocked, days, estimate }: { email: strin
   const [state, action, pending] = useActionState(requestDeletionAction, null);
   const matches = typed.trim().toLowerCase() === email.toLowerCase();
   const scheduled = state && "scheduledFor" in state ? new Date(state.scheduledFor) : null;
+  useEffect(() => {
+    if (!state || !("scheduledFor" in state)) return;
+    track("Account Deletion Requested", {});
+    loggedOut.current = logout(); // analytics forgets the customer too; `leave` waits for it
+  }, [state]);
 
   return (
     <section aria-labelledby="delete-account-title" className="mt-16 border border-danger p-6 md:p-8">

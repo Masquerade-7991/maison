@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { TrackEvent } from "@/components/analytics";
 import { ProductCard } from "@/components/product-card";
 import { getCategories, listProducts } from "@/lib/products";
 
@@ -26,6 +27,7 @@ export default async function SearchPage({ params, searchParams }: PageProps<"/[
 
   return (
     <section className="container-page pt-12 md:pt-20">
+      {q && <TrackEvent name="Products Searched" properties={{ query: q, result_count: results.length, market }} />}
       <h1 className="text-display">Search</h1>
 
       {/* Plain GET form: works without JS, and every search is a shareable URL. */}

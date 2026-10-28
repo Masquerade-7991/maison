@@ -3,7 +3,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AddToBagForm } from "@/components/add-to-bag-form";
+import { TrackEvent } from "@/components/analytics";
 import { ProductCard } from "@/components/product-card";
+import { toMajor } from "@/lib/analytics-events";
 import { formatMoney } from "@/lib/format";
 import { colourSwatch } from "@/lib/listing";
 import { getProductBySlug, getProductSlugs, getRelated } from "@/lib/products";
@@ -37,6 +39,20 @@ export default async function ProductPage({ params }: PageProps<"/[market]/produ
 
   return (
     <>
+      <TrackEvent
+        name="Product Viewed"
+        properties={{
+          product_id: p.slug,
+          name: p.name,
+          category: p.category.slug,
+          department: p.department,
+          price: toMajor(p.price, p.currency),
+          currency: p.currency,
+          market,
+          stock_state: state,
+          is_gift: p.isGift,
+        }}
+      />
       <div className="container-page pt-6 md:pt-10">
         <nav aria-label="Breadcrumb">
           <ol className="label flex flex-wrap gap-2 text-muted">
@@ -96,7 +112,7 @@ export default async function ProductPage({ params }: PageProps<"/[market]/produ
               <span>{p.colour}</span>
             </div>
 
-            <AddToBagForm slug={p.slug} sizes={sizes} buyable={buyable} />
+            <AddToBagForm slug={p.slug} sizes={sizes} buyable={buyable} price={p.price} currency={p.currency} market={market} />
 
             <p className="mt-4 text-muted">Complimentary shipping and returns within 30 days.</p>
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useRef, useState } from "react";
+import { track } from "@/lib/analytics";
 import { sendContactAction, type ContactState } from "@/lib/contact-actions";
 import { CONTACT_TOPICS, MESSAGE_MAX, type ContactField } from "@/lib/contact-rules";
 
@@ -67,7 +68,10 @@ function ContactForm({ name, email, onSent, onDone }: { name: string; email: str
   const [state, formAction, pending] = useActionState(
     async (prev: (ContactState & { round?: number }) | null, fd: FormData) => {
       const next = await sendContactAction(prev, fd);
-      if (next?.sent) onSent();
+      if (next?.sent) {
+        onSent();
+        track("Contact Message Sent", { topic: String(fd.get("topic")) }); // never the message or who sent it
+      }
       return next && { ...next, round: (prev?.round ?? 0) + 1 };
     },
     null,

@@ -29,7 +29,7 @@ Env lives in `.env` (from `.env.example`). You can't read or write `.env` (permi
 There is no test runner.
 
 - `npm run check`: the pure rules, run by Node 23+ (which strips TS types). That's why pure modules import each other as `./x.ts` and `tsconfig.json` sets `allowImportingTsExtensions`.
-- `npm run check:payment` and `npm run e2e:checkout | e2e:customer-flow | e2e:password-reset | e2e:contact | e2e:admin-stock | e2e:admin-flow | e2e:markets | e2e:alerts | e2e:account-deletion | e2e:upi` work on the shared production database and clean up after themselves. Test accounts are always `qa.…@example.com` and test products `qa-…`.
+- `npm run check:payment` and `npm run e2e:checkout | e2e:customer-flow | e2e:password-reset | e2e:contact | e2e:admin-stock | e2e:admin-flow | e2e:markets | e2e:alerts | e2e:account-deletion | e2e:upi | e2e:analytics` work on the shared production database and clean up after themselves. Test accounts are always `qa.…@example.com` and test products `qa-…`.
 - The e2e runs drive an installed Edge through `playwright-core` (`BROWSER_CHANNEL=chrome` for Chrome) against `npm run build` then `EMAIL_OFF=true EMAIL_LINKS_ON_PAGE=true BETTER_AUTH_URL=http://localhost:3100 npx next start -p 3100` (`EMAIL_OFF` keeps a local `SMTP_URL` from sending). Set `BASE=<url>` to target another server, such as the live site. Production mode allows 3 sign ups a minute, so leave a minute between runs. `e2e:customer-flow` needs `chain-shoulder-bag` to have 2 to 9 in stock.
 - After an interrupted run: `npx tsx scripts/e2e/db.mts cleanup:stale` lists leftover test accounts, and `cleanup <email…>` removes them and puts their paid stock back.
 
@@ -122,6 +122,15 @@ Every email is built in `src/lib/emails/`: `layout.ts` is the one frame (inline-
 - Customers get: verify, welcome (Better Auth `afterEmailVerification`), reset password, password changed (`onPasswordReset`), order confirmed / payment processing / payment failed (from `applyCheckoutSession`, only when its guarded update wins), shipped / delivered / cancelled (`updateFulfilment`), refunded, back in stock, and a contact-form acknowledgement that repeats only the topic, never the message. `CONTACT_TO` gets each contact message (Reply-To the visitor) and each paid order ("Oversold:" in the subject when it was).
 - **One thread per order:** every order email has the same subject (`orderSubject`) and replies to the confirmation's fixed `Message-ID` (`orderThreadHeaders`); later ones and resends get their own id, because Gmail drops a repeated one.
 - `/admin/emails` previews every template with the latest paid order; the admin order page lists that order's `email_log` and resends an email that matches its current state.
+
+### Analytics (Helo)
+
+Event analytics through the Helo Web SDK (`helo-sdk`, browser only). `src/lib/analytics.ts` is the only module that imports it; everything else calls its `track()`, `trackCharged()`, `identify()` and `logout()`, which never throw.
+
+- **Off** when `NEXT_PUBLIC_HELO_API_KEY` (publishable `pk_…`) or `NEXT_PUBLIC_HELO_PROJECT_ID` is unset, on `/admin`, under automation (`navigator.webdriver`, so the e2e runs send nothing unless a test sets `window.__HELO_TEST__`), and **until the visitor accepts the consent banner** (`src/components/consent-banner.tsx`, cookie `maison-consent`, reopened from "Cookie preferences" in the footer; the SDK also runs with `requireConsent`). `NEXT_PUBLIC_HELO_ENV=staging` uses the SDK's staging host. `NEXT_PUBLIC_*` values are inlined at build time, so changing them needs a rebuild.
+- **The catalogue** is `src/lib/analytics-events.ts`: every event name and its properties as one type, so a wrong name or property doesn't compile. Money is sent in major units (`toMajor`). Personal details (email, phone, address, messages) are stripped from event properties; email and first name go only to the Helo profile through `identify`, which `<Analytics />` (root layout) repeats on every page load because the SDK keeps the customer in memory only. `<Analytics />` also sends `page_view` on each route change; server pages fire their event with `<TrackEvent>`.
+- **Purchases:** the confirmation page renders `<TrackCharged>` once the order is paid: `recordChargedEvent` plus "Order Completed", once per order per browser (localStorage), then flushed. The SDK has no server API, so a customer who closes the tab before that page loads isn't counted.
+- **Testing:** `e2e:analytics` against a build with any `NEXT_PUBLIC_HELO_*` values: it answers Helo's hosts itself (nothing real is sent) and checks nothing goes before Accept, the events and one Charged, identify, logout, and nothing after Decline. The privacy note is the `#privacy` section of `/about`; keep it in step with what is collected.
 
 ### Admin writes never overwrite a sale
 

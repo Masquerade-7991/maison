@@ -3,7 +3,9 @@ import Link from "next/link";
 // Self-hosted (next/font/local inside the package): no Google Fonts request at build time, see CLAUDE.md.
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
+import { Analytics } from "@/components/analytics";
 import { BagLink } from "@/components/bag-link";
+import { ConsentBanner, CookiePreferencesLink } from "@/components/consent-banner";
 import { InlineScript } from "@/components/inline-script";
 import { MarketSelector } from "@/components/market-selector";
 import { Menu } from "@/components/menu";
@@ -108,6 +110,7 @@ function Footer() {
         <div className="flex flex-wrap gap-x-6 gap-y-2">
           <p>© {new Date().getFullYear()} Maison</p>
           <MarketSelector />
+          <CookiePreferencesLink />
         </div>
         <p>Imagery courtesy of Unsplash</p>
       </div>
@@ -130,6 +133,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <Header />
         <main className="flex-1">{children}</main>
         <Footer />
+        <ConsentBanner />
+        <Analytics />
       </body>
     </html>
   );
