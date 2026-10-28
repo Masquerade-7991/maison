@@ -20,9 +20,11 @@ export async function requestDeletionAction(_prev: DeletionState, fd: FormData):
   return { scheduledFor: scheduledFor.toISOString() };
 }
 
-export async function cancelDeletionAction(): Promise<void> {
+/** True when a scheduled deletion was cancelled (false: none was pending, or signed out). */
+export async function cancelDeletionAction(): Promise<boolean> {
   const session = await getSession();
-  if (!session) return;
-  await cancelDeletion(session.user);
+  if (!session) return false;
+  const cancelled = await cancelDeletion(session.user);
   revalidatePath("/account");
+  return cancelled;
 }

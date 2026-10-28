@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useSyncExternalStore, useTransition } from "react";
-import { track } from "@/lib/analytics";
+import { flushNow, track } from "@/lib/analytics";
 import { setMarketAction } from "@/lib/market-actions";
 import { INTERNATIONAL, MARKET_COOKIE, marketById, markets } from "@/lib/markets";
 
@@ -21,7 +21,10 @@ export function MarketSelector() {
   const m = current ? marketById(current) : null;
   const choose = (id: string) =>
     start(async () => {
-      if (id !== current) track("Market Changed", { from: current ?? "", to: id });
+      if (id !== current) {
+        track("Market Changed", { from: current ?? "", to: id });
+        flushNow(); // the page reloads next
+      }
       await setMarketAction(id);
       window.location.reload();
     });

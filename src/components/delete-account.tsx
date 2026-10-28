@@ -1,10 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { logout, track } from "@/lib/analytics";
 import { announceBagChange } from "@/lib/cart-rules";
-import { requestDeletionAction } from "@/lib/account-actions";
+import { cancelDeletionAction, requestDeletionAction } from "@/lib/account-actions";
 
 const longDate = (d: Date) => new Intl.DateTimeFormat("en-GB", { dateStyle: "long" }).format(d);
 
@@ -14,7 +14,7 @@ const longDate = (d: Date) => new Intl.DateTimeFormat("en-GB", { dateStyle: "lon
  * `blocked` (from the server) explains why it can't be requested now, e.g. an order in progress; `days` and
  * `estimate` come from src/lib/account-deletion.ts, the same rule that schedules it.
  */
-export function DeleteAccount({ email, blocked, days, estimate }: { email: string; blocked: string | null; days: number; estimate: string }) {
+export function DeleteAccount({ userId, name, email, blocked, days, estimate }: { userId: string; name: string; email: string; blocked: string | null; days: number; estimate: string }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const router = useRouter();
   const loggedOut = useRef<Promise<void>>(null);
@@ -32,8 +32,9 @@ export function DeleteAccount({ email, blocked, days, estimate }: { email: strin
   useEffect(() => {
     if (!state || !("scheduledFor" in state)) return;
     track("Account Deletion Requested", {});
-    loggedOut.current = logout(); // analytics forgets the customer too; `leave` waits for it
-  }, [state]);
+    // Analytics forgets the customer too (the session is already gone, so pass who it was); `leave` waits for it.
+    loggedOut.current = logout({ id: userId, email, name });
+  }, [state, userId, email, name]);
 
   return (
     <section aria-labelledby="delete-account-title" className="mt-16 border border-danger p-6 md:p-8">
@@ -123,5 +124,24 @@ export function DeleteAccount({ email, blocked, days, estimate }: { email: strin
         </div>
       </dialog>
     </section>
+  );
+}
+
+/** "Keep my account" on the deletion banner: cancels on the server, then records it. */
+export function KeepAccountButton() {
+  const [pending, start] = useTransition();
+  return (
+    <button
+      type="button"
+      disabled={pending}
+      onClick={() =>
+        start(async () => {
+          if (await cancelDeletionAction()) track("Account Deletion Cancelled", {});
+        })
+      }
+      className="btn btn-primary sm:w-auto"
+    >
+      {pending ? "Keeping your account…" : "Keep my account"}
+    </button>
   );
 }

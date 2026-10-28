@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
-import { track } from "@/lib/analytics";
+import { flushNow, track } from "@/lib/analytics";
 import type { AnalyticsEvents } from "@/lib/analytics-events";
 import { startCheckoutAction } from "@/lib/checkout-actions";
 
@@ -13,7 +13,10 @@ import { startCheckoutAction } from "@/lib/checkout-actions";
 export function CheckoutButton({ blocked, upi = false, summary }: { blocked: boolean; upi?: boolean; summary: Omit<AnalyticsEvents["Checkout Started"], "method" | "gateway"> }) {
   const [state, action, pending] = useActionState(startCheckoutAction, null);
   return (
-    <form action={action} onSubmit={() => track("Checkout Started", { method: "card", gateway: "stripe", ...summary })} className="mt-8">
+    <form action={action} onSubmit={() => {
+        track("Checkout Started", { method: "card", gateway: "stripe", ...summary });
+        flushNow(); // the page is about to leave for Stripe
+      }} className="mt-8">
       <button type="submit" disabled={blocked || pending} aria-describedby="checkout-note" className="btn btn-primary sm:w-full">
         {pending && <span aria-hidden className="size-3.5 animate-spin rounded-full border border-current border-t-transparent" />}
         {pending ? "Opening secure checkout…" : upi ? "Pay by card" : "Checkout"}
@@ -24,7 +27,10 @@ export function CheckoutButton({ blocked, upi = false, summary }: { blocked: boo
         ) : (
           <Link
             href="/checkout/upi"
-            onClick={() => track("Checkout Started", { method: "upi", gateway: "razorpay", ...summary })}
+            onClick={() => {
+              track("Checkout Started", { method: "upi", gateway: "razorpay", ...summary });
+              flushNow();
+            }}
             aria-describedby="checkout-note"
             className="btn btn-secondary mt-3 sm:w-full"
           >

@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { logout, track } from "@/lib/analytics";
+import { logout } from "@/lib/analytics";
 import { authClient } from "@/lib/auth-client";
 import { announceBagChange } from "@/lib/cart-rules";
 
@@ -16,8 +16,8 @@ export function SignOutButton({ className = "btn btn-secondary" }: { className?:
       className={className}
       onClick={async () => {
         setPending(true);
-        track("Signed Out", {});
-        await logout(); // while the customer is still identified, so the event is theirs
+        // While the customer is still signed in, so "Signed Out" is theirs; identifies first if this page hadn't yet.
+        await logout((await authClient.getSession().catch(() => null))?.data?.user, "Signed Out");
         await authClient.signOut(); // deletes the session row and clears the cookie
         announceBagChange(); // the header's count goes back to plain "Bag"
         router.replace("/");

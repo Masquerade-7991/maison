@@ -306,6 +306,7 @@ export const orders = pgTable(
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
     paidAt: timestamp({ withTimezone: true }),
+    analyticsChargedAt: timestamp({ withTimezone: true }), // the purchase was sent to analytics (Helo) by one browser
     fulfilmentStatus: fulfilmentStatus().notNull().default("unfulfilled"),
     carrier: text(),
     trackingNumber: text(),

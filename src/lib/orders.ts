@@ -2,7 +2,7 @@
 // then moved forward only by facts that came from the gateway itself: applyCheckoutSession with a Stripe
 // Checkout Session (a signature-verified webhook event, or a server-side sessions.retrieve()), or
 // applyRazorpayPayment with a Razorpay payment (its signed webhook, or fetched from its API).
-import { and, asc, desc, eq, inArray, isNotNull, lt, ne, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, ne, sql, type SQL } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import type Stripe from "stripe";
 import { db } from "@/db";
@@ -12,6 +12,7 @@ import { sendEmail, siteUrl, type SendResult } from "@/lib/email";
 import { renderEmail } from "@/lib/emails/layout";
 import { newOrderAdminEmail, orderEmail, type OrderEmailKind } from "@/lib/emails/templates";
 import type { IndianAddress } from "@/lib/address-rules";
+import { LATE_PURCHASE_DAYS } from "@/lib/analytics-events";
 import { formatMoney } from "@/lib/format";
 import { nextStatus, nextStatusFromFact, orderReference, type CheckoutEvent, type OrderStatus } from "@/lib/order-rules";
 import { fetchOrderPayments, fetchPayment, type RazorpayPayment } from "@/lib/razorpay";
@@ -386,6 +387,11 @@ export async function listOrdersForUser(userId: string) {
       totalCents: sql<number>`coalesce(${orders.amountTotalCents}, ${orders.subtotalCents})`,
       refundedCents: orders.refundedCents,
       currency: orders.currency,
+      market: orders.market,
+      provider: orders.provider,
+      analyticsChargedAt: orders.analyticsChargedAt,
+      paidAt: orders.paidAt,
+      itemSlugs: sql<string[]>`(select coalesce(array_agg(oi.slug order by oi.name), '{}') from order_items oi where oi.order_id = orders.id)`,
       // Spelled out: inside these subqueries ${orders.id} would render as a bare "id" (order_items.id).
       pieces: sql<number>`(select coalesce(sum(oi.quantity), 0)::int from order_items oi where oi.order_id = orders.id)`,
       firstItem: sql<string | null>`(select oi.name from order_items oi where oi.order_id = orders.id order by oi.name limit 1)`,
@@ -393,6 +399,28 @@ export async function listOrdersForUser(userId: string) {
     .from(orders)
     .where(and(eq(orders.userId, userId), ne(orders.status, "expired")))
     .orderBy(desc(orders.createdAt));
+}
+
+/**
+ * Claim a paid order's analytics purchase event for one browser: one guarded UPDATE, so of any number of
+ * tabs, devices or reloads only the first call returns true. Only the order's own customer can claim it.
+ */
+export async function claimAnalyticsCharged(orderId: string, userId: string) {
+  const rows = await db
+    .update(orders)
+    .set({ analyticsChargedAt: new Date() })
+    .where(
+      and(
+        eq(orders.id, orderId),
+        eq(orders.userId, userId),
+        eq(orders.status, "paid"),
+        ne(orders.fulfilmentStatus, "cancelled"),
+        isNull(orders.analyticsChargedAt),
+        gt(orders.paidAt, new Date(Date.now() - LATE_PURCHASE_DAYS * 86_400_000)),
+      ),
+    )
+    .returning({ id: orders.id });
+  return rows.length > 0;
 }
 
 /** A stored delivery address: Stripe's shape, plus `phone` on Razorpay orders. */

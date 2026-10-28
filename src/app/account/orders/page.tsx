@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { TrackCharged } from "@/components/analytics";
+import { latePurchaseOk, toMajor } from "@/lib/analytics-events";
 import { formatMoney } from "@/lib/format";
 import { listOrdersForUser } from "@/lib/orders";
 import { fulfilmentStatusCopy, orderReference, orderStatusCopy, orderStatusTone, refundLabel } from "@/lib/order-rules";
@@ -48,6 +50,26 @@ export default async function OrdersPage() {
           ))}
         </ul>
       )}
+      {/* Paid orders whose purchase never reached analytics (confirmation page closed early); claimed once. */}
+      {orders
+        .filter((o) => o.status === "paid" && !o.analyticsChargedAt && latePurchaseOk(o))
+        .map((o) => (
+          <TrackCharged
+            key={o.id}
+            orderId={o.id}
+            order={{
+              order_id: orderReference(o.id),
+              gateway: o.provider,
+              method: o.provider === "razorpay" ? "upi" : "card",
+              total: toMajor(o.totalCents, o.currency),
+              currency: o.currency,
+              market: o.market,
+              items_count: o.pieces,
+              transaction: true,
+            }}
+            items={o.itemSlugs}
+          />
+        ))}
     </>
   );
 }

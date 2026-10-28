@@ -108,7 +108,8 @@ export default async function CheckoutSuccessPage({ searchParams }: PageProps<"/
   return (
     <section className="container-page py-6 md:py-10">
       {paid ? (
-        <TrackCharged
+        !order.analyticsChargedAt && <TrackCharged
+          orderId={order.id}
           order={{
             order_id: reference,
             gateway: order.provider,

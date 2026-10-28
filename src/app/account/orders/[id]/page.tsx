@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { TrackCharged } from "@/components/analytics";
 import { OrderDetails } from "@/components/order-details";
+import { latePurchaseOk, toMajor } from "@/lib/analytics-events";
 import { emailIsOff } from "@/lib/email";
 import { formatMoney } from "@/lib/format";
 import { applyCheckoutSession, getOrderForUser, syncRazorpayOrder } from "@/lib/orders";
@@ -81,6 +83,23 @@ export default async function OrderPage({ params }: PageProps<"/account/orders/[
           {refund && <span className="text-muted"> · {refund}</span>}
         </p>
       </header>
+      {/* The purchase reaches analytics from here too when the confirmation page never loaded (tab closed). */}
+      {paid && !order.analyticsChargedAt && latePurchaseOk(order) && (
+        <TrackCharged
+          orderId={order.id}
+          order={{
+            order_id: orderReference(order.id),
+            gateway: order.provider,
+            method: upi ? "upi" : "card",
+            total: toMajor(order.amountTotalCents ?? order.subtotalCents, order.currency),
+            currency: order.currency,
+            market: order.market,
+            items_count: order.items.reduce((n, i) => n + i.quantity, 0),
+            transaction: true,
+          }}
+          items={order.items.map((i) => i.slug)}
+        />
+      )}
       {note && <p className="mt-6 border-l-2 border-line pl-4 text-muted">{note}</p>}
       <div className="mt-8">
         <OrderDetails order={order} />

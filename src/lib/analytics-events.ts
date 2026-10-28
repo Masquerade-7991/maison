@@ -31,17 +31,28 @@ export type AnalyticsEvents = {
   "Market Changed": { from: string; to: string };
   "Story Read": { story: string; topic: string };
   "Account Deletion Requested": Record<string, never>;
+  "Account Deletion Cancelled": Record<string, never>;
 };
 export type EventName = keyof AnalyticsEvents;
 
 /** Our integer minor units (paise, cents; yen and won have none) as the decimal amount Helo records. */
 export const toMajor = (minor: number, currency: string) => minor / 10 ** currencyDigits(currency.toUpperCase());
 
+/**
+ * A paid order's purchase is sent to analytics late (from the order page or the orders list, when its
+ * confirmation page never sent it) only this long after payment, and never once cancelled: a customer who
+ * consents months later doesn't flood Helo with old purchases stamped today.
+ */
+export const LATE_PURCHASE_DAYS = 7;
+export const latePurchaseOk = (o: { paidAt: Date | null; fulfilmentStatus: string }, now = Date.now()) =>
+  o.paidAt !== null && o.fulfilmentStatus !== "cancelled" && now - o.paidAt.getTime() < LATE_PURCHASE_DAYS * 86_400_000;
+
 /** Helo accepts names of 1 to 128 characters. */
 export const validEventName = (name: string) => name.length >= 1 && name.length <= 128;
 
 // Personal details only ever go to the Helo profile after consent and sign-in, never into event properties.
-const PERSONAL = /^(email|e_mail|phone|mobile|contact|address|line1|line2|postal_code|message|password)$/i;
+// `name` alone is allowed (a product's name); any person's name key isn't.
+const PERSONAL = /^(e_?mail|phone|mobile|contact|address|line1|line2|postal_code|message|password|(full|first|last|shipping|customer|billing|user)_?(name|e_?mail|phone)|customer_?id)$/i;
 
 /**
  * Properties as Helo takes them: undefined dropped, personal keys removed (and reported, so a mistake shows
