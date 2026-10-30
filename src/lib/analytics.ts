@@ -213,20 +213,20 @@ async function fillProfile(s: HeloSDK, user: User, market: string, gen: number) 
   try {
     if (sessionStorage.getItem(key)) return;
   } catch {}
-  const [first, ...rest] = user.name.trim().split(/\s+/);
-  const steps: (() => Promise<unknown>)[] = [
-    () => s.setEmail(user.email),
-    () => s.setFirstName(first || null),
-    () => s.setLastName(rest.join(" ") || null),
-    () => s.setUserAttribute("market", market),
-  ];
   const facts = await analyticsProfileFacts().catch(() => null);
-  if (facts?.phone) steps.push(() => s.setMobileNumber(facts.phone!));
-  if (facts?.latitude != null && facts.longitude != null) steps.push(() => s.setUserAttributeLocation(facts.latitude!, facts.longitude!));
-  for (const step of steps) {
-    if (gen !== generation) return;
-    await step();
-  }
+  if (gen !== generation) return;
+  // All together, never one by one: the SDK collects setters called within 500 ms into ONE profile request,
+  // and Helo keeps only the latest request's attributes (sent one at a time, each replaced the last, so
+  // email and name never stuck). Called in the same tick, every field arrives in the same request.
+  const [first, ...rest] = user.name.trim().split(/\s+/);
+  await Promise.allSettled([
+    s.setEmail(user.email),
+    s.setFirstName(first || null),
+    s.setLastName(rest.join(" ") || null),
+    s.setUserAttribute("market", market),
+    facts?.phone ? s.setMobileNumber(facts.phone) : null,
+    facts?.latitude != null && facts.longitude != null ? s.setUserAttributeLocation(facts.latitude, facts.longitude) : null,
+  ]);
   try {
     sessionStorage.setItem(key, "1");
   } catch {}

@@ -17,6 +17,7 @@ You own event analytics for Maison (Next.js 16, see CLAUDE.md "Analytics (Helo)"
 - A purchase is only ever sent through `<TrackCharged>`, whose server claim (`claimChargedEvent`, `orders.analytics_charged_at`) makes it once per order across tabs and devices.
 - **Identity order:** `logout(user, "Signed Out")` gets the user signing out and sends the event as theirs. Don't bypass the generation guard or call the SDK's identity methods directly.
 - **Late purchases** go only through `latePurchaseOk` (7 days, never cancelled), the same rule the claim's UPDATE enforces.
+- **Profile setters go together:** call them in one `Promise.allSettled([...])`, never awaited one by one. The SDK's 500 ms debounce then sends one `/api/v1/profile` request, and Helo keeps only the latest request's attributes.
 - **Never trust `optOut()` to clear anything:** the SDK re-saves its queue. Consent changes go through `setConsent` / `applyConsent`.
 - The privacy note in `/about#privacy` must describe what is actually collected.
 

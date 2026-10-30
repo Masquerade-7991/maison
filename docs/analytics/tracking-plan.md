@@ -53,6 +53,7 @@ Change an event: update the catalogue, this table and its changelog, and `script
   - `setUserAttributeLocation` from Vercel's IP geolocation (city level)
 
   The facts come from the `analyticsProfileFacts` Server Action. "Updated at" is Helo's own timestamp.
+- **One profile request:** the setters are called together, so the SDK's 500 ms debounce merges them into a single `/api/v1/profile` request. Helo keeps only the latest request's attributes, so setters awaited one at a time overwrite each other.
 - **Sign-out and account deletion:** `logout(user)`. If this page hadn't identified the customer yet, it identifies first, so Helo always receives the logout.
 - **Another customer on the same page:** `reset()`, then identify.
 - **Each page load identifies at once:** the browser keeps the last identified customer (`maison-helo-customer`), so no event waits on the server's session check. That check then confirms the customer, switches to another one, or logs out an expired session. The key is removed on sign-out and Decline.
@@ -70,6 +71,7 @@ Change an event: update the catalogue, this table and its changelog, and `script
 
 ## Changelog
 
+- **2026-10-30:** Email and name still didn't show on the profile. Each setter was awaited before the next, so Helo got one request per attribute, and each request replaced the one before. The setters are now called together and arrive as one request.
 - **2026-10-29 (profiles):** Helo's profile showed "Unknown" with no email. Email went only in identify's traits, and the profile page reads profile fields. The profile is now filled through `setEmail`, first and last name, the mobile number from delivery details, and IP location. The privacy note is updated to match.
 - **2026-10-29:** A signed-in customer's events were sent as "unknown". On each fresh page load the first events went out before `identify` finished. Events now wait (at most 8 seconds) until the page knows who is signed in. The browser remembers the last identified customer so each page identifies at once, without waiting for the server's session check (slow when cold); that check still corrects it.
 - **2026-10-28 (audit fixes):** Decline keeps wiping what the live SDK re-saves, and unconsented loads wipe before anything starts. Purchases are claimed only by a working SDK, a failed claim stays claimable, late purchases are limited to 7 days and never cancelled, and the orders list sends item slugs. "Signed Out" is sent from `logout()` after identifying. "Account Deletion Cancelled" fires only when one was cancelled. The person-name keys are blocked, and the privacy note now covers search terms and the UPI city and state.

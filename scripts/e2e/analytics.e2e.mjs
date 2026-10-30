@@ -79,7 +79,9 @@ try {
   assert.ok(idA.customer_id && idA.customer_id !== A, "identified by the account id, not the email");
   // Helo's profile page reads profile fields, so the email and name must arrive there too.
   await until(() => a.calls("/profile").some((c) => c.body.attributes?.last_name !== undefined), "the profile fields");
-  const profile = Object.assign({}, ...a.calls("/profile").map((c) => c.body.attributes));
+  // One request with every field: Helo keeps only the latest request's attributes.
+  const profile = a.calls("/profile").find((c) => c.body.attributes?.last_name !== undefined).body.attributes;
+  assert.ok(profile.email && profile.first_name && "market" in profile, `email, names and market in ONE profile request: ${JSON.stringify(profile)}`);
   assert.equal(profile.email, A, "profile email");
   assert.equal(profile.first_name, "QA", "profile first name");
   assert.equal(profile.last_name, "Test", "profile last name");
